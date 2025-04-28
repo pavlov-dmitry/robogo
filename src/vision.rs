@@ -5,6 +5,8 @@ use opencv::{
     prelude::*,
 };
 
+use super::board::*;
+
 type Polygon = Vector<Point>;
 
 pub struct Settings {
@@ -136,16 +138,32 @@ pub fn find_board_border(settings: &Settings, gray: &Mat) -> Result<Option<Polyg
 }
 
 pub fn warp_board_by_border(settings: &Settings, border: &Polygon, img: &Mat) -> Result<Mat> {
+    //так как полигон может быть непонятно как развернут то и в который мы придем надо тоже развернуть, возможны проблемы с ромбом
     let poly_f: Vector<Point2f> = border
         .iter()
         .map(|p| Point2f::new(p.x as f32, p.y as f32))
         .collect();
-    let dst_poly = Vector::from_slice(&[
-        Point2f::new(0., 0.),
-        Point2f::new(settings.board_width as f32, 0.),
-        Point2f::new(settings.board_width as f32, settings.board_height as f32),
-        Point2f::new(0., settings.board_height as f32),
-    ]);
+    let (sum_x, sum_y) = poly_f
+        .iter()
+        .fold((0., 0.), |(sx, sy), p| (sx + p.x, sy + p.y));
+    let mean_x = sum_x / border.len() as f32;
+    let mean_y = sum_y / border.len() as f32;
+    let dst_poly: Vector<Point2f> = poly_f
+        .iter()
+        .map(|p| {
+            let x = if p.x > mean_x {
+                settings.board_width as f32
+            } else {
+                0.
+            };
+            let y = if p.y > mean_y {
+                settings.board_height as f32
+            } else {
+                0.
+            };
+            Point2f::new(x, y)
+        })
+        .collect();
 
     let transform_matrix = imgproc::get_perspective_transform(&poly_f, &dst_poly, core::DECOMP_LU)?;
     let mut warped = Mat::default();
@@ -161,7 +179,8 @@ pub fn warp_board_by_border(settings: &Settings, border: &Polygon, img: &Mat) ->
     Ok(warped)
 }
 
-pub fn find_stones(settings: &Settings, img: &Mat, board_size: i32) -> Result<()> {
+pub fn find_stones(settings: &Settings, img: &Mat, board_size: usize) -> Result<Board> {
+    let mut board = Board::new_with_size(board_size);
     // Создаём маску для круглой области
     let mut mask = Mat::zeros(img.rows(), img.cols(), core::CV_8UC1)?.to_mat()?;
 
@@ -200,11 +219,11 @@ pub fn find_stones(settings: &Settings, img: &Mat, board_size: i32) -> Result<()
             let dominant_gray = mean[0] as u8;
 
             if dominant_gray < settings.black_stone_threshold {
-                //black stone
+                board.set(Position::new(x, y), Cell::black_stone());
             } else if dominant_gray > settings.white_stone_threshold {
-                //white stone
+                board.set(Position::new(x, y), Cell::white_stone());
             } else {
-                //no stone
+                board.set(Position::new(x, y), Cell::empty());
             }
 
             if let Some(image) = &mut debug_img {
@@ -240,5 +259,5 @@ pub fn find_stones(settings: &Settings, img: &Mat, board_size: i32) -> Result<()
             &core::Vector::default(),
         )?;
     }
-    Ok(())
+    Ok(board)
 }

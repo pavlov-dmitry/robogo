@@ -1,5 +1,7 @@
-use opencv::Result;
+mod board;
 mod vision;
+
+use opencv::Result;
 
 fn main() -> Result<()> {
     let img = vision::load_as_bw_from("/home/deck/development/robogo_tests/0/4.jpg")?;
@@ -7,6 +9,8 @@ fn main() -> Result<()> {
     let border_polygon = vision::find_board_border(&vision_settings, &img)?;
     let border = border_polygon.expect("Не найдено поле");
     let warped_img = vision::warp_board_by_border(&vision_settings, &border, &img)?;
-    vision::find_stones(&vision_settings, &warped_img, 19)?;
+    let board = vision::find_stones(&vision_settings, &warped_img, 19)?;
+
+    println!("{}", board);
     Ok(())
 }
