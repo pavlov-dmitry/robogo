@@ -218,12 +218,13 @@ pub fn find_stones(settings: &Settings, img: &Mat, board_size: usize) -> Result<
             let mean = core::mean(&img, &mask)?;
             let dominant_gray = mean[0] as u8;
 
+            let pos_y = board_size - y - 1;
             if dominant_gray < settings.black_stone_threshold {
-                board.set(Position::new(x, y), Cell::black_stone());
+                board.set(Position::new(x, pos_y), Cell::black_stone());
             } else if dominant_gray > settings.white_stone_threshold {
-                board.set(Position::new(x, y), Cell::white_stone());
+                board.set(Position::new(x, pos_y), Cell::white_stone());
             } else {
-                board.set(Position::new(x, y), Cell::empty());
+                board.set(Position::new(x, pos_y), Cell::empty());
             }
 
             if let Some(image) = &mut debug_img {

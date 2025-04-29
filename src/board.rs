@@ -119,7 +119,7 @@ impl Display for Cell {
 
 impl Display for Board {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for row in 0..self.size {
+        for row in (0..self.size).rev() {
             write!(f, "{:>2}| ", row + 1)?;
             for col in 0..self.size {
                 let idx = self.pos2idx(Position::new(col, row));
