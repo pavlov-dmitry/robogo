@@ -1,11 +1,13 @@
 use std::fmt;
 use std::fmt::Display;
 
-enum Stone {
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub enum Stone {
     Black,
     White,
 }
 
+#[derive(PartialEq, Eq)]
 pub struct Cell(Option<Stone>);
 
 impl Cell {
@@ -22,6 +24,7 @@ impl Cell {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct Position {
     x: usize,
     y: usize,
@@ -72,6 +75,36 @@ impl Board {
     }
 }
 
+pub enum Action {
+    Add(Position, Stone),
+    Remove(Position, Stone),
+}
+
+pub fn diff(from: &Board, to: &Board) -> Vec<Action> {
+    let mut res = Vec::new();
+    if from.size != to.size {
+        return res;
+    }
+
+    for y in 0..from.size {
+        for x in 0..from.size {
+            let pos = Position::new(x, y);
+            let idx = from.pos2idx(pos);
+            let Cell(f) = &from.board[idx];
+            let Cell(t) = &to.board[idx];
+            if f != t {
+                if let Some(stone) = f {
+                    res.push(Action::Remove(pos, stone.clone()));
+                }
+                if let Some(stone) = t {
+                    res.push(Action::Add(pos, stone.clone()));
+                }
+            }
+        }
+    }
+    res
+}
+
 impl Display for Cell {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -106,5 +139,30 @@ impl Display for Board {
         }
         writeln!(f)?;
         Ok(())
+    }
+}
+
+impl Display for Position {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let letter = char::from_u32(65 + self.x as u32).expect("invalid to char conversion");
+        write!(f, "{}{}", letter, self.y + 1)
+    }
+}
+
+impl Display for Stone {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Stone::Black => write!(f, "Black stone"),
+            Stone::White => write!(f, "White stone"),
+        }
+    }
+}
+
+impl Display for Action {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Action::Add(pos, stone) => write!(f, "Add to {} {}", pos, stone),
+            Action::Remove(pos, stone) => write!(f, "Remove from {} {}", pos, stone),
+        }
     }
 }
