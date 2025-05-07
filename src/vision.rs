@@ -28,15 +28,15 @@ pub struct Settings {
 impl Settings {
     pub fn default() -> Settings {
         Settings {
-            binary_threshold: 70.,
+            binary_threshold: 120.,
             min_board_border_perimeter: 2500.,
             board_width: 1000,
             board_height: 1000,
-            stones_left_shift: 23.,
-            stones_right_shift: 20.,
+            stones_left_shift: 17.,
+            stones_right_shift: 17.,
             stones_top_shift: 17.,
-            stones_bottom_shift: 23.,
-            stone_radius: 17,
+            stones_bottom_shift: 17.,
+            stone_radius: 15,
             white_stone_threshold: 190,
             black_stone_threshold: 60,
             is_dump_steps: true,
@@ -97,9 +97,9 @@ pub fn find_board_border(settings: &Settings, gray: &Mat) -> Result<Option<Polyg
         let perimeter = imgproc::arc_length(&contour, true)?;
         let mut polygon: Vector<Point> = Vector::new();
         // апроксимация полигонов
-        imgproc::approx_poly_dp(&contour, &mut polygon, 0.05 * perimeter, true)?;
+        imgproc::approx_poly_dp(&contour, &mut polygon, 0.005 * perimeter, true)?;
         // поиск четрехугольника
-        if polygon.len() == 4 {
+        if polygon.len() == 4 && imgproc::is_contour_convex(&polygon)? {
             let perimeter = imgproc::arc_length(&polygon, false)?;
             // с самым большим периметром
             if perimeter > settings.min_board_border_perimeter && perimeter > best_perimeter {
