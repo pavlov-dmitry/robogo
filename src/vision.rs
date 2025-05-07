@@ -33,10 +33,10 @@ impl Settings {
             board_width: 1000,
             board_height: 1000,
             stones_left_shift: 17.,
-            stones_right_shift: 17.,
+            stones_right_shift: 16.,
             stones_top_shift: 17.,
-            stones_bottom_shift: 17.,
-            stone_radius: 15,
+            stones_bottom_shift: 16.,
+            stone_radius: 14,
             white_stone_threshold: 190,
             black_stone_threshold: 60,
             is_dump_steps: true,
@@ -95,11 +95,20 @@ pub fn find_board_border(settings: &Settings, gray: &Mat) -> Result<Option<Polyg
     let mut best_polygon: Option<Polygon> = Option::None;
     for contour in contours {
         let perimeter = imgproc::arc_length(&contour, true)?;
+        // сразу отсекаем полигоны раные всей картинке
+        if perimeter as i32 == (gray.cols() * 2 + gray.rows() * 2) {
+            continue;
+        }
         let mut polygon: Vector<Point> = Vector::new();
         // апроксимация полигонов
         imgproc::approx_poly_dp(&contour, &mut polygon, 0.005 * perimeter, true)?;
         // поиск четрехугольника
         if polygon.len() == 4 && imgproc::is_contour_convex(&polygon)? {
+            // полигоны с нулевой точкой это полигоны на весь экран, такое нам не нужно
+            let has_zero_zero_pnt = polygon.iter().any(|pnt| pnt.x == 0 && pnt.y == 0);
+            if has_zero_zero_pnt {
+                continue;
+            }
             let perimeter = imgproc::arc_length(&polygon, false)?;
             // с самым большим периметром
             if perimeter > settings.min_board_border_perimeter && perimeter > best_perimeter {
