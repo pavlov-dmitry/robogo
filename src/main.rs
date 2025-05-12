@@ -23,7 +23,10 @@ fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> 
 
 fn main() -> Result<()> {
     let load_board_from = |filename| -> Result<board::Board> {
-        let img = vision::load_as_bw_from(filename)?;
+        let img = opencv::imgcodecs::imread(filename, opencv::imgcodecs::IMREAD_COLOR)?;
+        if img.empty() {
+            panic!("Не удалось загрузить изображение!");
+        }
         let vision_settings = vision::Settings::default();
         let border_polygon = vision::find_board_border(&vision_settings, &img)?;
         let border = border_polygon.expect("Не найдено поле");
@@ -32,59 +35,62 @@ fn main() -> Result<()> {
         Ok(board)
     };
 
-    let mut cam = videoio::VideoCapture::new(0, videoio::CAP_ANY)?;
-    if !cam.is_opened()? {
-        panic!("Не удалось открыть камеру");
-    }
-    let width_success = cam.set(videoio::CAP_PROP_FRAME_WIDTH, 1920.0)?;
-    let height_success = cam.set(videoio::CAP_PROP_FRAME_HEIGHT, 1080.0)?;
-    println!("width: {}   height: {}", width_success, height_success);
+    let board = load_board_from("/home/deck/development/robogo_tests/0/6.jpg").expect("ooops");
+    println!("{}", board);
 
-    highgui::named_window("Camera", highgui::WINDOW_NORMAL)?;
-    let mut frame = Mat::default();
+    //    let mut cam = videoio::VideoCapture::new(0, videoio::CAP_ANY)?;
+    //    if !cam.is_opened()? {
+    //        panic!("Не удалось открыть камеру");
+    //    }
+    //    let width_success = cam.set(videoio::CAP_PROP_FRAME_WIDTH, 1920.0)?;
+    //    let height_success = cam.set(videoio::CAP_PROP_FRAME_HEIGHT, 1080.0)?;
+    //    println!("width: {}   height: {}", width_success, height_success);
 
-    let mut state = Board::default();
-    let mut counter = 0;
+    //    highgui::named_window("Camera", highgui::WINDOW_NORMAL)?;
+    //    let mut frame = Mat::default();
 
-    loop {
-        cam.read(&mut frame)?;
-        if frame.empty() {
-            continue;
-        }
+    //    let mut state = Board::default();
+    //    let mut counter = 0;
 
-        opencv::imgcodecs::imwrite("./original.jpg", &frame, &Vector::default())?;
+    //    loop {
+    //        cam.read(&mut frame)?;
+    //        if frame.empty() {
+    //            continue;
+    //        }
 
-        let vision_settings = vision::Settings::default();
-        let img = vision::convert_to_grayscale(&frame)?;
-        let border_polygon = vision::find_board_border(&vision_settings, &img)?;
-        if let Some(border) = border_polygon {
-            let warped_img = vision::warp_board_by_border(&vision_settings, &border, &img)?;
-            let board = vision::find_stones(&vision_settings, &warped_img, 19)?;
+    //        opencv::imgcodecs::imwrite("./original.jpg", &frame, &Vector::default())?;
 
-            let actions = board::diff(&state, &board);
-            if !actions.is_empty() {
-                if actions.len() > 1 {
-                    counter += 1;
-                    let out_dir = format!("./error_{}", counter);
-                    let _ = copy_dir_all("./vision_dump", &out_dir);
-                }
-                println!("____________________________________________________");
-                for action in actions {
-                    println!("{}", action);
-                }
-            }
-            state = board;
-        } else {
-            //println!("____________________________________________________");
-            //println!("Не найдено поле")
-        }
+    //        let vision_settings = vision::Settings::default();
+    //        let img = vision::convert_to_grayscale(&frame)?;
+    //        let border_polygon = vision::find_board_border(&vision_settings, &img)?;
+    //        if let Some(border) = border_polygon {
+    //            let warped_img = vision::warp_board_by_border(&vision_settings, &border, &img)?;
+    //            let board = vision::find_stones(&vision_settings, &warped_img, 19)?;
 
-        highgui::imshow("Camera", &frame)?;
+    //            let actions = board::diff(&state, &board);
+    //            if !actions.is_empty() {
+    //                if actions.len() > 1 {
+    //                    counter += 1;
+    //                    let out_dir = format!("./error_{}", counter);
+    //                    let _ = copy_dir_all("./vision_dump", &out_dir);
+    //                }
+    //                println!("____________________________________________________");
+    //                for action in actions {
+    //                    println!("{}", action);
+    //                }
+    //            }
+    //            state = board;
+    //        } else {
+    //            //println!("____________________________________________________");
+    //            //println!("Не найдено поле")
+    //        }
 
-        if highgui::wait_key(10)? == 27 {
-            break;
-        }
-    }
+    //        highgui::imshow("Camera", &frame)?;
+
+    //        if highgui::wait_key(10)? == 27 {
+    //            break;
+    //        }
+    //    }
 
     Ok(())
 }

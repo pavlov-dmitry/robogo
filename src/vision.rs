@@ -1,6 +1,6 @@
 use opencv::{
-    Result, core,
-    core::{Point, Point2f, Scalar, Size, Vector},
+    Result,
+    core::{self, Point, Point2f, Scalar, Size, Vector, convert_to_direct_3d_surface9_def},
     imgproc,
     prelude::*,
 };
@@ -21,6 +21,7 @@ pub struct Settings {
     stone_radius: i32,
     white_stone_threshold: u8,
     black_stone_threshold: u8,
+    min_color_threshold: u8,
     is_dump_steps: bool,
     dump_dir: String,
 }
@@ -39,6 +40,7 @@ impl Settings {
             stone_radius: 14,
             white_stone_threshold: 190,
             black_stone_threshold: 60,
+            min_color_threshold: 12,
             is_dump_steps: true,
             dump_dir: String::from("./vision_dump/"),
         }
@@ -62,7 +64,8 @@ pub fn load_as_bw_from(filename: &str) -> Result<Mat> {
 }
 
 // Если и возвращает то это полигон с 4мя точками
-pub fn find_board_border(settings: &Settings, gray: &Mat) -> Result<Option<Polygon>> {
+pub fn find_board_border(settings: &Settings, img: &Mat) -> Result<Option<Polygon>> {
+    let gray = convert_to_grayscale(img)?;
     // бинаризация по порогу
     let mut binary = Mat::default();
     imgproc::threshold(
@@ -194,12 +197,13 @@ pub fn find_stones(settings: &Settings, img: &Mat, board_size: usize) -> Result<
     let mut mask = Mat::zeros(img.rows(), img.cols(), core::CV_8UC1)?.to_mat()?;
 
     let mut debug_img: Option<Mat> = if settings.is_dump_steps {
-        let mut image = Mat::default();
-        imgproc::cvt_color(&img, &mut image, imgproc::COLOR_GRAY2BGR, 0)?;
-        Some(image)
+        Some(img.clone())
     } else {
         None
     };
+
+    let mut lab = Mat::default();
+    imgproc::cvt_color(&img, &mut lab, imgproc::COLOR_BGR2Lab, 0)?;
 
     let horz_shift = settings.stones_left_shift + settings.stones_right_shift;
     let horz_size = img.cols() - horz_shift as i32;
@@ -224,13 +228,18 @@ pub fn find_stones(settings: &Settings, img: &Mat, board_size: usize) -> Result<
                 imgproc::LINE_8,
                 0,
             )?;
-            let mean = core::mean(&img, &mask)?;
-            let dominant_gray = mean[0] as u8;
+            let mean = core::mean(&lab, &mask)?;
+            let l = mean[0] as u8;
+            let a = mean[1] as u8;
+            let b = mean[2] as u8;
+            let a = a as f64 - 128.;
+            let b = b as f64 - 128.;
+            let color = (a * a + b * b).sqrt() as u8;
 
             let pos_y = board_size - y - 1;
-            if dominant_gray < settings.black_stone_threshold {
+            if l < settings.black_stone_threshold && color <= settings.min_color_threshold {
                 board.set(Position::new(x, pos_y), Cell::black_stone());
-            } else if dominant_gray > settings.white_stone_threshold {
+            } else if l > settings.white_stone_threshold && color <= settings.min_color_threshold {
                 board.set(Position::new(x, pos_y), Cell::white_stone());
             } else {
                 board.set(Position::new(x, pos_y), Cell::empty());
@@ -242,7 +251,7 @@ pub fn find_stones(settings: &Settings, img: &Mat, board_size: usize) -> Result<
                     image,
                     center,
                     radius,
-                    core::Scalar::new(0.0, 0.0, 255.0, 0.0), // Красная рамка
+                    core::Scalar::new(0.0, 0.0, 255.0, 0.0),
                     1,
                     imgproc::LINE_8,
                     0,
@@ -250,11 +259,11 @@ pub fn find_stones(settings: &Settings, img: &Mat, board_size: usize) -> Result<
                 // Подписываем значение
                 imgproc::put_text(
                     image,
-                    &format!("{}", dominant_gray),
-                    core::Point::new(center.x - 10, center.y),
+                    &format!("{}/{}", l, color),
+                    core::Point::new(center.x - 20, center.y),
                     imgproc::FONT_HERSHEY_SIMPLEX,
-                    0.4,
-                    core::Scalar::new(0.0, 0.0, 255.0, 0.0),
+                    0.35,
+                    core::Scalar::new(255.0, 0.0, 255.0, 0.0),
                     1,
                     imgproc::LINE_AA,
                     false,
