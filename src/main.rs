@@ -1,7 +1,9 @@
 mod board;
+mod katago;
 mod vision;
 
 use board::Board;
+use katago::Katago;
 use opencv::{Result, core::Vector, highgui, prelude::*, videoio};
 
 use std::path::Path;
@@ -22,21 +24,21 @@ fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> 
 }
 
 fn main() -> Result<()> {
-    let load_board_from = |filename| -> Result<board::Board> {
-        let img = opencv::imgcodecs::imread(filename, opencv::imgcodecs::IMREAD_COLOR)?;
-        if img.empty() {
-            panic!("Не удалось загрузить изображение!");
-        }
-        let vision_settings = vision::Settings::default();
-        let border_polygon = vision::find_board_border(&vision_settings, &img)?;
-        let border = border_polygon.expect("Не найдено поле");
-        let warped_img = vision::warp_board_by_border(&vision_settings, &border, &img)?;
-        let board = vision::find_stones(&vision_settings, &warped_img, 19)?;
-        Ok(board)
-    };
+    //    let load_board_from = |filename| -> Result<board::Board> {
+    //        let img = opencv::imgcodecs::imread(filename, opencv::imgcodecs::IMREAD_COLOR)?;
+    //        if img.empty() {
+    //            panic!("Не удалось загрузить изображение!");
+    //        }
+    //        let vision_settings = vision::Settings::default();
+    //        let border_polygon = vision::find_board_border(&vision_settings, &img)?;
+    //        let border = border_polygon.expect("Не найдено поле");
+    //        let warped_img = vision::warp_board_by_border(&vision_settings, &border, &img)?;
+    //        let board = vision::find_stones(&vision_settings, &warped_img, 19)?;
+    //        Ok(board)
+    //    };
 
-    let board = load_board_from("/home/deck/development/robogo_tests/0/6.jpg").expect("ooops");
-    println!("{}", board);
+    //    let board = load_board_from("/home/deck/development/robogo_tests/0/6.jpg").expect("ooops");
+    //    println!("{}", board);
 
     //    let mut cam = videoio::VideoCapture::new(0, videoio::CAP_ANY)?;
     //    if !cam.is_opened()? {
@@ -91,6 +93,15 @@ fn main() -> Result<()> {
     //            break;
     //        }
     //    }
+
+    let mut katago = Katago::new(katago::Settings::default()).expect("error create katago engine");
+    println!("katago started.");
+    katago.wait_gtp_ready().expect("error wait for ready");
+    println!("gtp ready");
+    let response = katago.send("version").expect("cannot send command");
+    println!("answer: {}", response);
+    let response = katago.send("showboard").expect("write to process error");
+    println!("answer: {}", response);
 
     Ok(())
 }
