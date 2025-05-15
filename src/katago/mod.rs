@@ -1,9 +1,13 @@
-use chrono::{Local, prelude::*};
+use super::board::{self, Board, Color};
+use chrono::Local;
 use std::{
     fs::File,
     io::{self, BufRead, BufReader, Write},
+    num::ParseIntError,
     process::{Command, Stdio},
 };
+
+mod parse;
 
 pub struct Settings {
     dir: String,
@@ -27,9 +31,40 @@ impl Settings {
     }
 }
 
+#[derive(Debug)]
+pub enum Error {
+    Io(io::Error),
+    InvalidTextProtocol,
+    Parse(ParseIntError),
+    UnknownError(String),
+}
+
+impl From<io::Error> for Error {
+    fn from(e: io::Error) -> Error {
+        Error::Io(e)
+    }
+}
+
+impl From<ParseIntError> for Error {
+    fn from(value: ParseIntError) -> Self {
+        Error::Parse(value)
+    }
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+pub struct State {
+    pub board: Board,
+    pub move_num: u32,
+    pub next_move: Color,
+    pub black_captured: u32,
+    pub white_captured: u32,
+}
+
 pub struct Katago {
     process: std::process::Child,
     log: Option<File>,
+    board_size: usize,
 }
 
 fn timestamp() -> String {
@@ -38,7 +73,7 @@ fn timestamp() -> String {
 }
 
 impl Katago {
-    pub fn new(settings: Settings) -> io::Result<Katago> {
+    pub fn new(settings: Settings) -> Result<Katago> {
         let process = Command::new("./katago")
             .current_dir(settings.dir)
             .arg("gtp")
@@ -60,10 +95,11 @@ impl Katago {
         Ok(Katago {
             process: process,
             log: log_file,
+            board_size: 19,
         })
     }
 
-    pub fn wait_gtp_ready(&mut self) -> io::Result<()> {
+    pub fn wait_gtp_ready(&mut self) -> Result<()> {
         let stdout = self.process.stderr.as_mut().ok_or_else(|| {
             io::Error::new(io::ErrorKind::BrokenPipe, "Katago stdout not aviable")
         })?;
@@ -81,7 +117,7 @@ impl Katago {
         Ok(())
     }
 
-    pub fn send(&mut self, cmd: &str) -> io::Result<String> {
+    fn send(&mut self, cmd: &str) -> Result<String> {
         let stdin =
             self.process.stdin.as_mut().ok_or_else(|| {
                 io::Error::new(io::ErrorKind::BrokenPipe, "Katago stdin not aviable")
@@ -112,5 +148,44 @@ impl Katago {
             response.push('\n');
         }
         Ok(response)
+    }
+
+    pub fn get_current_state(&mut self) -> Result<State> {
+        let answer = self.send("showboard")?;
+        if answer.starts_with("?") {
+            return Err(Error::UnknownError(answer));
+        }
+
+        let lines: Vec<&str> = answer.as_str().lines().collect();
+        if lines.len() < self.board_size + 6 {
+            return Err(Error::InvalidTextProtocol);
+        }
+
+        let mut board = Board::new_with_size(self.board_size);
+        for line_number in 0..self.board_size {
+            let y = self.board_size - line_number;
+            parse::board_line(lines[2 + line_number], self.board_size, |x, color| {
+                board.set(board::Position::new(x, y), board::Cell::from(color));
+            })?
+        }
+
+        Ok(State {
+            move_num: parse::move_num(lines[0])?,
+            board: board,
+            next_move: parse::next_move(lines[self.board_size + 2])?,
+            black_captured: parse::black_captured(lines[self.board_size + 4])?,
+            white_captured: parse::white_captured(lines[self.board_size + 5])?,
+        })
+    }
+}
+
+impl std::fmt::Display for State {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.board)?;
+        writeln!(f, "move number: {}", self.move_num)?;
+        writeln!(f, "next move: {}", self.next_move)?;
+        writeln!(f, "Black player captured stones: {}", self.black_captured)?;
+        writeln!(f, "White player captured stones: {}", self.white_captured)?;
+        Ok(())
     }
 }

@@ -24,6 +24,12 @@ impl Cell {
     }
 }
 
+impl From<Color> for Cell {
+    fn from(color: Color) -> Self {
+        Cell(Some(color))
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct Position {
     x: usize,

@@ -23,7 +23,7 @@ fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> 
     Ok(())
 }
 
-fn main() -> Result<()> {
+fn main() -> katago::Result<()> {
     //    let load_board_from = |filename| -> Result<board::Board> {
     //        let img = opencv::imgcodecs::imread(filename, opencv::imgcodecs::IMREAD_COLOR)?;
     //        if img.empty() {
@@ -98,10 +98,8 @@ fn main() -> Result<()> {
     println!("katago started.");
     katago.wait_gtp_ready().expect("error wait for ready");
     println!("gtp ready");
-    let response = katago.send("version").expect("cannot send command");
-    println!("answer: {}", response);
-    let response = katago.send("showboard").expect("write to process error");
-    println!("answer: {}", response);
+    let state = katago.get_current_state()?;
+    println!("{state}");
 
     Ok(())
 }
