@@ -19,7 +19,7 @@ where
 {
     for i in 0..board_size {
         let idx = 3 + i * 2;
-        match line.get(idx..idx) {
+        match line.get(idx..idx + 1) {
             Some(ch) => {
                 if ch == "X" {
                     put_stone(i, Color::Black);

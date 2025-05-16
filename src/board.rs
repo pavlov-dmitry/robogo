@@ -1,5 +1,6 @@
 use std::fmt;
 use std::fmt::Display;
+use std::str::FromStr;
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum Color {
@@ -39,6 +40,23 @@ pub struct Position {
 impl Position {
     pub fn new(x: usize, y: usize) -> Position {
         Position { x: x, y: y }
+    }
+}
+
+pub struct ParsePositionError;
+
+impl FromStr for Position {
+    type Err = ParsePositionError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.len() > 1 {
+            let char = s.as_bytes()[0];
+            let x = (char - 65) as usize;
+            let num_str = s.get(1..).ok_or_else(|| ParsePositionError)?;
+            let y = num_str.parse::<usize>().map_err(|_| ParsePositionError)?;
+            return Ok(Position { x, y });
+        }
+        Err(ParsePositionError)
     }
 }
 

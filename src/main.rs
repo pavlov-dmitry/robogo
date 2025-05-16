@@ -100,6 +100,14 @@ fn main() -> katago::Result<()> {
     println!("gtp ready");
     let state = katago.get_current_state()?;
     println!("{state}");
-
+    katago.play(board::Color::Black, board::Position::new(1, 1))?;
+    katago.play(board::Color::White, board::Position::new(2, 1))?;
+    katago.play(board::Color::Black, board::Position::new(3, 1))?;
+    katago.play(board::Color::White, board::Position::new(10, 1))?;
+    katago.play(board::Color::Black, board::Position::new(2, 0))?;
+    katago.play(board::Color::White, board::Position::new(11, 1))?;
+    katago.play(board::Color::Black, board::Position::new(2, 2))?;
+    let state = katago.get_current_state()?;
+    println!("{state}");
     Ok(())
 }

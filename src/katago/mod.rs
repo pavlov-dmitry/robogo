@@ -1,5 +1,6 @@
-use super::board::{self, Board, Color};
+use super::board::{self, Board, Color, ParsePositionError};
 use chrono::Local;
+use std::str::FromStr;
 use std::{
     fs::File,
     io::{self, BufRead, BufReader, Write},
@@ -35,7 +36,8 @@ impl Settings {
 pub enum Error {
     Io(io::Error),
     InvalidTextProtocol,
-    Parse(ParseIntError),
+    ParseIntError,
+    ParsePositionError,
     UnknownError(String),
 }
 
@@ -46,8 +48,14 @@ impl From<io::Error> for Error {
 }
 
 impl From<ParseIntError> for Error {
-    fn from(value: ParseIntError) -> Self {
-        Error::Parse(value)
+    fn from(_: ParseIntError) -> Self {
+        Error::ParseIntError
+    }
+}
+
+impl From<ParsePositionError> for Error {
+    fn from(_: ParsePositionError) -> Self {
+        Error::ParsePositionError
     }
 }
 
@@ -163,7 +171,7 @@ impl Katago {
 
         let mut board = Board::new_with_size(self.board_size);
         for line_number in 0..self.board_size {
-            let y = self.board_size - line_number;
+            let y = self.board_size - line_number - 1;
             parse::board_line(lines[2 + line_number], self.board_size, |x, color| {
                 board.set(board::Position::new(x, y), board::Cell::from(color));
             })?
@@ -177,6 +185,26 @@ impl Katago {
             white_captured: parse::white_captured(lines[self.board_size + 5])?,
         })
     }
+
+    pub fn play(&mut self, color: Color, pos: board::Position) -> Result<()> {
+        let cmd = format!("play {color} {pos}");
+        let answer = self.send(&cmd)?;
+        if answer.starts_with("?") {
+            return Err(Error::UnknownError(answer));
+        }
+        Ok(())
+    }
+
+    pub fn genmove_for(&mut self, color: Color) -> Result<board::Position> {
+        let cmd = format!("genmove {color}");
+        let answer = self.send(&cmd)?;
+        if answer.starts_with("?") {
+            return Err(Error::UnknownError(answer));
+        }
+        let pos_str = answer.get(2..).ok_or_else(|| Error::InvalidTextProtocol)?;
+        let position = board::Position::from_str(pos_str)?;
+        Ok(position)
+    }
 }
 
 impl std::fmt::Display for State {
@@ -184,8 +212,8 @@ impl std::fmt::Display for State {
         write!(f, "{}", self.board)?;
         writeln!(f, "move number: {}", self.move_num)?;
         writeln!(f, "next move: {}", self.next_move)?;
-        writeln!(f, "Black player captured stones: {}", self.black_captured)?;
-        writeln!(f, "White player captured stones: {}", self.white_captured)?;
+        writeln!(f, "black stones captured: {}", self.black_captured)?;
+        writeln!(f, "white stones captured: {}", self.white_captured)?;
         Ok(())
     }
 }
