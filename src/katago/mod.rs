@@ -202,7 +202,7 @@ impl Katago {
             return Err(Error::UnknownError(answer));
         }
         let pos_str = answer.get(2..).ok_or_else(|| Error::InvalidTextProtocol)?;
-        let position = board::Position::from_str(pos_str)?;
+        let position = board::Position::from_str(pos_str.trim())?;
         Ok(position)
     }
 }
