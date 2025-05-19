@@ -1,10 +1,12 @@
 mod board;
 mod katago;
+mod speech;
 mod vision;
 
 use board::Board;
 use katago::Katago;
 use opencv::{Result, core::Vector, highgui, prelude::*, videoio};
+use speech::Speech;
 
 use std::path::Path;
 use std::{fs, io};
@@ -23,7 +25,7 @@ fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> 
     Ok(())
 }
 
-fn main() -> katago::Result<()> {
+fn main() -> io::Result<()> {
     //    let load_board_from = |filename| -> Result<board::Board> {
     //        let img = opencv::imgcodecs::imread(filename, opencv::imgcodecs::IMREAD_COLOR)?;
     //        if img.empty() {
@@ -94,20 +96,25 @@ fn main() -> katago::Result<()> {
     //        }
     //    }
 
-    let mut katago = Katago::new(katago::Settings::default()).expect("error create katago engine");
-    println!("katago started.");
-    katago.wait_gtp_ready().expect("error wait for ready");
-    println!("gtp ready");
-    let state = katago.get_current_state()?;
-    println!("{state}");
-    katago.play(board::Color::Black, board::Position::new(1, 1))?;
-    katago.play(board::Color::White, board::Position::new(2, 1))?;
-    katago.play(board::Color::Black, board::Position::new(3, 1))?;
-    katago.play(board::Color::White, board::Position::new(10, 1))?;
-    katago.play(board::Color::Black, board::Position::new(2, 0))?;
-    katago.play(board::Color::White, board::Position::new(11, 1))?;
-    katago.play(board::Color::Black, board::Position::new(2, 2))?;
-    let state = katago.get_current_state()?;
-    println!("{state}");
+    //    let mut katago = Katago::new(katago::Settings::default()).expect("error create katago engine");
+    //    println!("katago started.");
+    //    katago.wait_gtp_ready().expect("error wait for ready");
+    //    println!("gtp ready");
+    //    let state = katago.get_current_state()?;
+    //    println!("{state}");
+    //    katago.play(board::Color::Black, board::Position::new(1, 1))?;
+    //    katago.play(board::Color::White, board::Position::new(2, 1))?;
+    //    katago.play(board::Color::Black, board::Position::new(3, 1))?;
+    //    katago.play(board::Color::White, board::Position::new(10, 1))?;
+    //    katago.play(board::Color::Black, board::Position::new(2, 0))?;
+    //    katago.play(board::Color::White, board::Position::new(11, 1))?;
+    //    katago.play(board::Color::Black, board::Position::new(2, 2))?;
+    //    let state = katago.get_current_state()?;
+    //    println!("{state}");
+
+    let speech = Speech::new(speech::Settings::default());
+    let is_ok = speech.say("Тест синтеза речи")?;
+    println!("is_ok: {is_ok}");
+
     Ok(())
 }
