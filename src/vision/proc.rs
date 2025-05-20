@@ -1,14 +1,16 @@
 use opencv::{
     Result,
-    core::{self, Point, Point2f, Scalar, Size, Vector, convert_to_direct_3d_surface9_def},
+    core::{self, Point, Point2f, Scalar, Size, Vector},
     imgproc,
     prelude::*,
 };
 
-use super::board::*;
+use super::{Board, Cell, Position};
 
 type Polygon = Vector<Point>;
+pub type Error = opencv::Error;
 
+#[derive(Clone)]
 pub struct Settings {
     binary_threshold: f64,
     min_board_border_perimeter: f64,

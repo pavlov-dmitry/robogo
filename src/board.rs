@@ -8,7 +8,7 @@ pub enum Color {
     White,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone)]
 pub struct Cell(Option<Color>);
 
 impl Cell {
@@ -60,6 +60,7 @@ impl FromStr for Position {
     }
 }
 
+#[derive(Clone)]
 pub struct Board {
     board: Vec<Cell>,
     size: usize,
@@ -127,6 +128,13 @@ pub fn diff(from: &Board, to: &Board) -> Vec<Action> {
         }
     }
     res
+}
+
+pub fn has_diff(from: &Board, to: &Board) -> bool {
+    if from.size != to.size {
+        return true;
+    }
+    !diff(from, to).is_empty()
 }
 
 impl Display for Cell {

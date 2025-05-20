@@ -96,17 +96,17 @@ fn main() -> katago::Result<()> {
     //        }
     //    }
 
-    let mut katago = Katago::new(katago::Settings::default()).expect("error create katago engine");
-    println!("katago started.");
-    katago.wait_gtp_ready().expect("error wait for ready");
-    println!("gtp ready");
-    let state = katago.get_current_state()?;
-    println!("{state}");
-    katago.play(board::Color::Black, board::Position::new(3, 3))?;
-    let pos = katago.genmove_for(board::Color::White)?;
-    println!("KATAGO MOVE TO {pos}!");
-    let state = katago.get_current_state()?;
-    println!("{state}");
+    //let mut katago = Katago::new(katago::Settings::default()).expect("error create katago engine");
+    //println!("katago started.");
+    //katago.wait_gtp_ready().expect("error wait for ready");
+    //println!("gtp ready");
+    //let state = katago.get_current_state()?;
+    //println!("{state}");
+    //katago.play(board::Color::Black, board::Position::new(3, 3))?;
+    //let pos = katago.genmove_for(board::Color::White)?;
+    //println!("KATAGO MOVE TO {pos}!");
+    //let state = katago.get_current_state()?;
+    //println!("{state}");
 
     //let speech = Speech::new(speech::Settings::default());
     //let is_ok = speech.say("Тест синтеза речи")?;
