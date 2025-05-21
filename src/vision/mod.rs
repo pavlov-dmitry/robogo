@@ -2,12 +2,8 @@ mod proc;
 
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread::JoinHandle;
-use std::time::SystemTime;
 
-use crate::board::has_diff;
-
-use super::board::{self, Board, Cell, Position};
-use proc::Settings;
+use super::board::{self, Board, Cell, Position, has_diff};
 
 use opencv::core::Mat;
 use opencv::prelude::*;
@@ -15,6 +11,21 @@ use opencv::videoio::{self, VideoCapture};
 
 type OnBoardUpdated = Box<dyn FnMut(Board)>;
 type OnError = Box<dyn FnMut(Error)>;
+
+#[derive(Clone)]
+pub struct Settings {
+    proc: proc::Settings,
+    stable_board_time_ms: u32,
+}
+
+impl Settings {
+    pub fn default() -> Self {
+        Settings {
+            proc: proc::Settings::default(),
+            stable_board_time_ms: 1500,
+        }
+    }
+}
 
 enum Message {
     Board(Box<Board>),
@@ -92,9 +103,9 @@ impl Vision {
             return Ok(None);
         }
 
-        if let Some(border) = proc::find_board_border(settings, &frame)? {
-            let warped_img = proc::warp_board_by_border(settings, &border, &frame)?;
-            let board = proc::find_stones(settings, &warped_img, 19)?;
+        if let Some(border) = proc::find_board_border(&settings.proc, &frame)? {
+            let warped_img = proc::warp_board_by_border(&settings.proc, &border, &frame)?;
+            let board = proc::find_stones(&settings.proc, &warped_img, 19)?;
             return Ok(Some(board));
         }
 
@@ -110,6 +121,7 @@ impl Vision {
         let mut sended_board = Board::default();
         let mut last_board = Board::default();
         let mut last_board_time = std::time::SystemTime::now();
+        let mut last_board_updated = false;
 
         loop {
             if quit_rx.try_recv().is_ok() {
@@ -121,6 +133,7 @@ impl Vision {
                         if board::has_diff(&last_board, &brd) {
                             last_board = brd;
                             last_board_time = std::time::SystemTime::now();
+                            last_board_updated = true;
                         }
                     }
                 }
@@ -129,10 +142,16 @@ impl Vision {
                     break;
                 }
             }
-            if let Ok(dur) = last_board_time.elapsed() {
-                if dur.as_millis() > 1500 && has_diff(&sended_board, &last_board) {
-                    sended_board = last_board.clone();
-                    tx.send(Message::Board(Box::new(sended_board.clone())));
+            if last_board_updated {
+                if let Ok(dur) = last_board_time.elapsed() {
+                    if dur.as_millis() > settings.stable_board_time_ms as u128
+                        && has_diff(&sended_board, &last_board)
+                    {
+                        sended_board = last_board.clone();
+                        if let Err(_) = tx.send(Message::Board(Box::new(sended_board.clone()))) {
+                            break;
+                        }
+                    }
                 }
             }
             std::thread::sleep(std::time::Duration::from_millis(20));
