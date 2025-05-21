@@ -4,7 +4,7 @@ mod speech;
 mod vision;
 
 use board::Board;
-use katago::Katago;
+use katago::Gtp;
 use opencv::{Result, core::Vector, highgui, prelude::*, videoio};
 use speech::Speech;
 

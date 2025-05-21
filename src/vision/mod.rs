@@ -27,7 +27,7 @@ impl Settings {
     }
 }
 
-enum Message {
+enum Msg {
     Board(Box<Board>),
     Error(Box<proc::Error>),
 }
@@ -52,7 +52,7 @@ pub struct Vision {
     on_board_updated: OnBoardUpdated,
     on_error: OnError,
     thread_handler: Option<JoinHandle<()>>,
-    rx: Option<Receiver<Message>>,
+    rx: Option<Receiver<Msg>>,
     quit_tx: Option<Sender<()>>,
     camera: Option<VideoCapture>,
 }
@@ -115,7 +115,7 @@ impl Vision {
     fn main_loop(
         mut camera: VideoCapture,
         settings: Settings,
-        tx: Sender<Message>,
+        tx: Sender<Msg>,
         quit_rx: Receiver<()>,
     ) {
         let mut sended_board = Board::default();
@@ -138,7 +138,7 @@ impl Vision {
                     }
                 }
                 Err(e) => {
-                    let _ = tx.send(Message::Error(Box::new(e)));
+                    let _ = tx.send(Msg::Error(Box::new(e)));
                     break;
                 }
             }
@@ -148,7 +148,7 @@ impl Vision {
                         && has_diff(&sended_board, &last_board)
                     {
                         sended_board = last_board.clone();
-                        if let Err(_) = tx.send(Message::Board(Box::new(sended_board.clone()))) {
+                        if let Err(_) = tx.send(Msg::Board(Box::new(sended_board.clone()))) {
                             break;
                         }
                     }
@@ -159,7 +159,7 @@ impl Vision {
     }
 
     pub fn spawn(&mut self) {
-        let (tx, rx) = mpsc::channel::<Message>();
+        let (tx, rx) = mpsc::channel::<Msg>();
         let (quit_tx, quit_rx) = mpsc::channel::<()>();
         let camera = self.camera.take().unwrap();
         let settings = self.settings.clone();
@@ -175,8 +175,8 @@ impl Vision {
         if let Some(rx) = &self.rx {
             match rx.try_recv() {
                 Ok(msg) => match msg {
-                    Message::Board(brd) => (self.on_board_updated)(*brd),
-                    Message::Error(e) => (self.on_error)(Error::ProcError(*e)),
+                    Msg::Board(brd) => (self.on_board_updated)(*brd),
+                    Msg::Error(e) => (self.on_error)(Error::ProcError(*e)),
                 },
                 Err(e) => match e {
                     TryRecvError::Disconnected => (self.on_error)(Error::Disconnected),

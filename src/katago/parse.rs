@@ -1,5 +1,5 @@
 use super::Color;
-use super::{Error, Result};
+use super::gtp::{Error, Result};
 
 pub fn move_num(line: &str) -> Result<u32> {
     if line.starts_with("= MoveNum: ") {
