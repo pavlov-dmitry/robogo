@@ -42,6 +42,7 @@ impl Pos {
         Pos { x: x, y: y }
     }
 }
+#[derive(Clone)]
 pub enum Move {
     Stone(Pos),
     Pass,

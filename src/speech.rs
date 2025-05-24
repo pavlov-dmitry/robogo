@@ -1,6 +1,10 @@
 use std::collections::LinkedList;
-use std::io::{self, Result, Write};
+use std::io;
 use std::process::{self, Command};
+
+pub trait ToSpeech {
+    fn to_speech(&self) -> String;
+}
 
 pub struct Settings {
     voice: String,
@@ -35,7 +39,12 @@ impl Speech {
     }
 
     pub fn say(&mut self, text: &str) {
-        self.speech_queue.push_back(String::from(text));
+        if !text.is_empty() {
+            self.speech_queue.push_back(String::from(text));
+        }
+    }
+    pub fn say_for(&mut self, t: &impl ToSpeech) {
+        self.say(&t.to_speech());
     }
 
     pub fn step(&mut self) -> Option<Msg> {

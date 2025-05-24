@@ -62,13 +62,13 @@ impl Katago {
 
     pub fn play(&mut self, color: board::Color, mv: board::Move) {
         if let Some(tx) = &self.cmd_tx {
-            tx.send(Cmd::Play(color, mv));
+            let _ = tx.send(Cmd::Play(color, mv));
         }
     }
 
     pub fn genmove_for(&mut self, color: Color) {
         if let Some(tx) = &self.cmd_tx {
-            tx.send(Cmd::GenMove(color));
+            let _ = tx.send(Cmd::GenMove(color));
         }
     }
 
@@ -87,22 +87,24 @@ impl Katago {
     }
 
     fn send_state(msg_tx: &mut Sender<Msg>, gtp: &mut Gtp) {
-        match gtp.get_current_state() {
+        let _ = match gtp.get_current_state() {
             Ok(state) => msg_tx.send(Msg::State(state)),
             Err(e) => msg_tx.send(Msg::Error(Error::from(e))),
         };
     }
 
     fn main_loop(mut gtp: Gtp, cmd_rx: Receiver<Cmd>, mut msg_tx: Sender<Msg>) {
+        // ждем загрузки katago
         if let Err(e) = gtp.wait_gtp_ready() {
             let _ = msg_tx.send(Msg::Error(Error::from(e)));
             return;
         }
+        //обрабатываем очередь команд (тут работает синхронно, дожидаясь ответа на каждую команду)
         for cmd in cmd_rx.iter() {
             match cmd {
                 Cmd::Play(color, mv) => {
                     if let Err(e) = gtp.play(color, mv) {
-                        msg_tx.send(Msg::Error(Error::from(e)));
+                        let _ = msg_tx.send(Msg::Error(Error::from(e)));
                     }
                     Katago::send_state(&mut msg_tx, &mut gtp);
                 }

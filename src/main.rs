@@ -67,7 +67,7 @@ fn main() -> Result<()> {
         if let Some(msg) = game.step() {
             nothing_todo = false;
             match msg {
-                game::Msg::WrongStones(_) => speech.say("Какая-то хрень на доске"),
+                game::Msg::WrongStones(ws) => speech.say_for(&ws),
                 game::Msg::HumanPlay(color, mv) => {
                     speech.say("Ага.");
                     katago.play(color, mv);
@@ -75,7 +75,10 @@ fn main() -> Result<()> {
                 game::Msg::NeedAiMove(cl) => katago.genmove_for(cl),
                 game::Msg::Speech(s) => speech.say(&s),
                 game::Msg::Error(e) => return Err(Error::from(e)),
-                game::Msg::GameFinished => speech.say("Спасибо за игру."),
+                game::Msg::GameFinished => {
+                    speech.say("Спасибо за игру.");
+                    break;
+                }
             }
         }
 

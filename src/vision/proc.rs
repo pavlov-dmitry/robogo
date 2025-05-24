@@ -56,15 +56,6 @@ pub fn convert_to_grayscale(img: &Mat) -> Result<Mat> {
     return Ok(gray);
 }
 
-pub fn load_as_bw_from(filename: &str) -> Result<Mat> {
-    let img = opencv::imgcodecs::imread(filename, opencv::imgcodecs::IMREAD_COLOR)?;
-    if img.empty() {
-        panic!("Не удалось загрузить изображение!");
-    }
-
-    convert_to_grayscale(&img)
-}
-
 // Если и возвращает то это полигон с 4мя точками
 pub fn find_board_border(settings: &Settings, img: &Mat) -> Result<Option<Polygon>> {
     let gray = convert_to_grayscale(img)?;
