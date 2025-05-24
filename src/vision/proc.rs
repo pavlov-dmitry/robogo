@@ -5,7 +5,7 @@ use opencv::{
     prelude::*,
 };
 
-use super::{Board, Cell, Position};
+use super::{Board, Cell, Pos};
 
 type Polygon = Vector<Point>;
 pub type Error = opencv::Error;
@@ -240,11 +240,11 @@ pub fn find_stones(settings: &Settings, img: &Mat, board_size: usize) -> Result<
 
             let pos_y = board_size - y - 1;
             if l < settings.black_stone_threshold && color <= settings.min_color_threshold {
-                board.set(Position::new(x, pos_y), Cell::black_stone());
+                board.set(Pos::new(x, pos_y), Cell::black_stone());
             } else if l > settings.white_stone_threshold && color <= settings.min_color_threshold {
-                board.set(Position::new(x, pos_y), Cell::white_stone());
+                board.set(Pos::new(x, pos_y), Cell::white_stone());
             } else {
-                board.set(Position::new(x, pos_y), Cell::empty());
+                board.set(Pos::new(x, pos_y), Cell::empty());
             }
 
             if let Some(image) = &mut debug_img {

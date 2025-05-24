@@ -1,4 +1,4 @@
-use super::board::{self, Board, Color, ParsePositionError};
+use super::board::{self, Board, Color, Move, ParsePositionError};
 use super::parse;
 use chrono::Local;
 use std::str::FromStr;
@@ -66,6 +66,18 @@ pub struct State {
     pub next_move: Color,
     pub black_captured: u32,
     pub white_captured: u32,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        State {
+            board: Board::default(),
+            move_num: 0,
+            next_move: Color::Black,
+            black_captured: 0,
+            white_captured: 0,
+        }
+    }
 }
 
 pub struct Gtp {
@@ -172,7 +184,7 @@ impl Gtp {
         for line_number in 0..self.board_size {
             let y = self.board_size - line_number - 1;
             parse::board_line(lines[2 + line_number], self.board_size, |x, color| {
-                board.set(board::Position::new(x, y), board::Cell::from(color));
+                board.set(board::Pos::new(x, y), board::Cell::from(color));
             })?
         }
 
@@ -185,8 +197,8 @@ impl Gtp {
         })
     }
 
-    pub fn play(&mut self, color: Color, pos: board::Position) -> Result<()> {
-        let cmd = format!("play {color} {pos}");
+    pub fn play(&mut self, color: Color, mv: board::Move) -> Result<()> {
+        let cmd = format!("play {color} {mv}");
         let answer = self.send(&cmd)?;
         if answer.starts_with("?") {
             return Err(Error::UnknownError(answer));
@@ -194,15 +206,21 @@ impl Gtp {
         Ok(())
     }
 
-    pub fn genmove_for(&mut self, color: Color) -> Result<board::Position> {
+    pub fn genmove_for(&mut self, color: Color) -> Result<Move> {
         let cmd = format!("genmove {color}");
-        let answer = self.send(&cmd)?;
+        let answer = self.send(&cmd)?.to_uppercase();
         if answer.starts_with("?") {
             return Err(Error::UnknownError(answer));
         }
+        if answer.starts_with("= PASS") {
+            return Ok(Move::Pass);
+        }
+        if answer.starts_with("= RESIGN") {
+            return Ok(Move::Resign);
+        }
         let pos_str = answer.get(2..).ok_or_else(|| Error::InvalidTextProtocol)?;
-        let position = board::Position::from_str(pos_str.trim())?;
-        Ok(position)
+        let position = board::Pos::from_str(pos_str.trim())?;
+        Ok(Move::Stone(position))
     }
 }
 

@@ -1,116 +1,89 @@
 mod board;
+mod game;
 mod katago;
 mod speech;
 mod vision;
 
-use board::Board;
-use katago::Gtp;
-use opencv::{Result, core::Vector, highgui, prelude::*, videoio};
-use speech::Speech;
-
-use std::path::Path;
-use std::{fs, io};
-
-fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> {
-    fs::create_dir_all(&dst)?;
-    for entry in fs::read_dir(src)? {
-        let entry = entry?;
-        let ty = entry.file_type()?;
-        if ty.is_dir() {
-            copy_dir_all(entry.path(), dst.as_ref().join(entry.file_name()))?;
-        } else {
-            fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
-        }
-    }
-    Ok(())
+#[derive(Debug)]
+enum Error {
+    Katago(katago::Error),
+    Speech(speech::Error),
+    Vision(vision::Error),
+    Game(game::Error),
 }
 
-fn main() -> katago::Result<()> {
-    //    let load_board_from = |filename| -> Result<board::Board> {
-    //        let img = opencv::imgcodecs::imread(filename, opencv::imgcodecs::IMREAD_COLOR)?;
-    //        if img.empty() {
-    //            panic!("Не удалось загрузить изображение!");
-    //        }
-    //        let vision_settings = vision::Settings::default();
-    //        let border_polygon = vision::find_board_border(&vision_settings, &img)?;
-    //        let border = border_polygon.expect("Не найдено поле");
-    //        let warped_img = vision::warp_board_by_border(&vision_settings, &border, &img)?;
-    //        let board = vision::find_stones(&vision_settings, &warped_img, 19)?;
-    //        Ok(board)
-    //    };
+type Result<T> = std::result::Result<T, Error>;
 
-    //    let board = load_board_from("/home/deck/development/robogo_tests/0/6.jpg").expect("ooops");
-    //    println!("{}", board);
+impl From<katago::Error> for Error {
+    fn from(value: katago::Error) -> Self {
+        Error::Katago(value)
+    }
+}
+impl From<speech::Error> for Error {
+    fn from(value: speech::Error) -> Self {
+        Error::Speech(value)
+    }
+}
+impl From<vision::Error> for Error {
+    fn from(value: vision::Error) -> Self {
+        Error::Vision(value)
+    }
+}
+impl From<game::Error> for Error {
+    fn from(value: game::Error) -> Self {
+        Error::Game(value)
+    }
+}
 
-    //    let mut cam = videoio::VideoCapture::new(0, videoio::CAP_ANY)?;
-    //    if !cam.is_opened()? {
-    //        panic!("Не удалось открыть камеру");
-    //    }
-    //    let width_success = cam.set(videoio::CAP_PROP_FRAME_WIDTH, 1920.0)?;
-    //    let height_success = cam.set(videoio::CAP_PROP_FRAME_HEIGHT, 1080.0)?;
-    //    println!("width: {}   height: {}", width_success, height_success);
+fn main() -> Result<()> {
+    let mut game = game::Game::new();
+    let mut katago = katago::Katago::new(katago::Settings::default())?;
+    let mut vision = vision::Vision::new(vision::Settings::default())?;
+    let mut speech = speech::Speech::new(speech::Settings::default());
 
-    //    highgui::named_window("Camera", highgui::WINDOW_NORMAL)?;
-    //    let mut frame = Mat::default();
+    vision.spawn();
+    katago.spawn();
 
-    //    let mut state = Board::default();
-    //    let mut counter = 0;
+    loop {
+        let mut nothing_todo = true;
+        //обработка подсисетмы зрения
+        if let Some(msg) = vision.step() {
+            nothing_todo = false;
+            match msg {
+                vision::Msg::Board(brd) => game.on_human_update_board(brd),
+                vision::Msg::Error(e) => return Err(Error::from(e)),
+            }
+        }
+        // обработка подсистемы AI
+        if let Some(msg) = katago.step() {
+            nothing_todo = false;
+            match msg {
+                katago::Msg::State(state) => game.on_ai_state_update(state),
+                katago::Msg::Move(mv) => game.on_ai_move(mv),
+                katago::Msg::Error(e) => return Err(Error::from(e)),
+            }
+        }
+        // обработка подсистемы ведения игры
+        if let Some(msg) = game.step() {
+            nothing_todo = false;
+            match msg {
+                game::Msg::WrongStones(_) => speech.say("Какая-то хрень на доске"),
+                game::Msg::HumanPlay(color, mv) => {
+                    speech.say("Ага.");
+                    katago.play(color, mv);
+                }
+                game::Msg::NeedAiMove(cl) => katago.genmove_for(cl),
+                game::Msg::Speech(s) => speech.say(&s),
+                game::Msg::Error(e) => return Err(Error::from(e)),
+                game::Msg::GameFinished => speech.say("Спасибо за игру."),
+            }
+        }
 
-    //    loop {
-    //        cam.read(&mut frame)?;
-    //        if frame.empty() {
-    //            continue;
-    //        }
-
-    //        opencv::imgcodecs::imwrite("./original.jpg", &frame, &Vector::default())?;
-
-    //        let vision_settings = vision::Settings::default();
-    //        let img = vision::convert_to_grayscale(&frame)?;
-    //        let border_polygon = vision::find_board_border(&vision_settings, &img)?;
-    //        if let Some(border) = border_polygon {
-    //            let warped_img = vision::warp_board_by_border(&vision_settings, &border, &img)?;
-    //            let board = vision::find_stones(&vision_settings, &warped_img, 19)?;
-
-    //            let actions = board::diff(&state, &board);
-    //            if !actions.is_empty() {
-    //                if actions.len() > 1 {
-    //                    counter += 1;
-    //                    let out_dir = format!("./error_{}", counter);
-    //                    let _ = copy_dir_all("./vision_dump", &out_dir);
-    //                }
-    //                println!("____________________________________________________");
-    //                for action in actions {
-    //                    println!("{}", action);
-    //                }
-    //            }
-    //            state = board;
-    //        } else {
-    //            //println!("____________________________________________________");
-    //            //println!("Не найдено поле")
-    //        }
-
-    //        highgui::imshow("Camera", &frame)?;
-
-    //        if highgui::wait_key(10)? == 27 {
-    //            break;
-    //        }
-    //    }
-
-    //let mut katago = Katago::new(katago::Settings::default()).expect("error create katago engine");
-    //println!("katago started.");
-    //katago.wait_gtp_ready().expect("error wait for ready");
-    //println!("gtp ready");
-    //let state = katago.get_current_state()?;
-    //println!("{state}");
-    //katago.play(board::Color::Black, board::Position::new(3, 3))?;
-    //let pos = katago.genmove_for(board::Color::White)?;
-    //println!("KATAGO MOVE TO {pos}!");
-    //let state = katago.get_current_state()?;
-    //println!("{state}");
-
-    //let speech = Speech::new(speech::Settings::default());
-    //let is_ok = speech.say("Тест синтеза речи")?;
-    //println!("is_ok: {is_ok}");
+        speech.step();
+        if nothing_todo {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
 
     Ok(())
 }

@@ -32,20 +32,25 @@ impl From<Color> for Cell {
 }
 
 #[derive(Clone, Copy)]
-pub struct Position {
+pub struct Pos {
     x: usize,
     y: usize,
 }
 
-impl Position {
-    pub fn new(x: usize, y: usize) -> Position {
-        Position { x: x, y: y }
+impl Pos {
+    pub fn new(x: usize, y: usize) -> Pos {
+        Pos { x: x, y: y }
     }
+}
+pub enum Move {
+    Stone(Pos),
+    Pass,
+    Resign,
 }
 
 pub struct ParsePositionError;
 
-impl FromStr for Position {
+impl FromStr for Pos {
     type Err = ParsePositionError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -54,7 +59,7 @@ impl FromStr for Position {
             let x = (char - 65) as usize;
             let num_str = s.get(1..).ok_or_else(|| ParsePositionError)?;
             let y = num_str.parse::<usize>().map_err(|_| ParsePositionError)?;
-            return Ok(Position { x, y });
+            return Ok(Pos { x, y });
         }
         Err(ParsePositionError)
     }
@@ -66,6 +71,12 @@ pub struct Board {
     size: usize,
 }
 
+impl Default for Board {
+    fn default() -> Self {
+        Board::new_with_size(19)
+    }
+}
+
 impl Board {
     pub fn new_with_size(size: usize) -> Board {
         let mut res = Board {
@@ -75,11 +86,8 @@ impl Board {
         res.board.resize_with(size * size, Cell::empty);
         return res;
     }
-    pub fn default() -> Board {
-        Board::new_with_size(19)
-    }
 
-    pub fn pos2idx(&self, pos: Position) -> usize {
+    pub fn pos2idx(&self, pos: Pos) -> usize {
         if pos.x >= self.size {
             panic!(
                 "invalid x position where board size={} and x={}",
@@ -94,15 +102,15 @@ impl Board {
         }
         pos.y * self.size + pos.x
     }
-    pub fn set(&mut self, pos: Position, cell: Cell) {
+    pub fn set(&mut self, pos: Pos, cell: Cell) {
         let idx = self.pos2idx(pos);
         self.board[idx] = cell;
     }
 }
 
 pub enum Action {
-    Add(Position, Color),
-    Remove(Position, Color),
+    Add(Pos, Color),
+    Remove(Pos, Color),
 }
 
 pub fn diff(from: &Board, to: &Board) -> Vec<Action> {
@@ -113,7 +121,7 @@ pub fn diff(from: &Board, to: &Board) -> Vec<Action> {
 
     for y in 0..from.size {
         for x in 0..from.size {
-            let pos = Position::new(x, y);
+            let pos = Pos::new(x, y);
             let idx = from.pos2idx(pos);
             let Cell(f) = &from.board[idx];
             let Cell(t) = &to.board[idx];
@@ -154,7 +162,7 @@ impl Display for Board {
         for row in (0..self.size).rev() {
             write!(f, "{:>2}| ", row + 1)?;
             for col in 0..self.size {
-                let idx = self.pos2idx(Position::new(col, row));
+                let idx = self.pos2idx(Pos::new(col, row));
                 write!(f, "{} ", self.board[idx])?;
             }
             writeln!(f)?;
@@ -174,10 +182,20 @@ impl Display for Board {
     }
 }
 
-impl Display for Position {
+impl Display for Pos {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let letter = char::from_u32(65 + self.x as u32).expect("invalid to char conversion");
         write!(f, "{}{}", letter, self.y + 1)
+    }
+}
+
+impl Display for Move {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Move::Pass => write!(f, "pass"),
+            Move::Resign => write!(f, "resign"),
+            Move::Stone(pos) => write!(f, "{pos}"),
+        }
     }
 }
 

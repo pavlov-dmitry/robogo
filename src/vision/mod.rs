@@ -3,14 +3,11 @@ mod proc;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread::JoinHandle;
 
-use super::board::{self, Board, Cell, Position, has_diff};
+use super::board::{self, Board, Cell, Pos, has_diff};
 
 use opencv::core::Mat;
 use opencv::prelude::*;
 use opencv::videoio::{self, VideoCapture};
-
-type OnBoardUpdated = Box<dyn FnMut(Board)>;
-type OnError = Box<dyn FnMut(Error)>;
 
 #[derive(Clone)]
 pub struct Settings {
@@ -27,11 +24,17 @@ impl Settings {
     }
 }
 
-enum Msg {
+enum VisionMsg {
     Board(Box<Board>),
-    Error(Box<proc::Error>),
+    Error(proc::Error),
 }
 
+pub enum Msg {
+    Board(Box<Board>),
+    Error(Error),
+}
+
+#[derive(Debug)]
 pub enum Error {
     ProcError(proc::Error),
     CameraNotOpened,
@@ -49,10 +52,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 pub struct Vision {
     settings: Settings,
-    on_board_updated: OnBoardUpdated,
-    on_error: OnError,
     thread_handler: Option<JoinHandle<()>>,
-    rx: Option<Receiver<Msg>>,
+    rx: Option<Receiver<VisionMsg>>,
     quit_tx: Option<Sender<()>>,
     camera: Option<VideoCapture>,
 }
@@ -71,29 +72,11 @@ impl Vision {
 
         Ok(Vision {
             settings: settings,
-            on_board_updated: Box::new(|_| {}),
-            on_error: Box::new(|_| {}),
             thread_handler: None,
             rx: None,
             quit_tx: None,
             camera: Some(cam),
         })
-    }
-
-    pub fn on_board_updated<F>(&mut self, cb: F) -> &Self
-    where
-        F: FnMut(Board) + 'static,
-    {
-        self.on_board_updated = Box::new(cb);
-        self
-    }
-
-    pub fn on_error<F>(&mut self, cb: F) -> &Self
-    where
-        F: FnMut(Error) + 'static,
-    {
-        self.on_error = Box::new(cb);
-        self
     }
 
     fn read_board(camera: &mut VideoCapture, settings: &Settings) -> opencv::Result<Option<Board>> {
@@ -115,7 +98,7 @@ impl Vision {
     fn main_loop(
         mut camera: VideoCapture,
         settings: Settings,
-        tx: Sender<Msg>,
+        tx: Sender<VisionMsg>,
         quit_rx: Receiver<()>,
     ) {
         let mut sended_board = Board::default();
@@ -138,7 +121,7 @@ impl Vision {
                     }
                 }
                 Err(e) => {
-                    let _ = tx.send(Msg::Error(Box::new(e)));
+                    let _ = tx.send(VisionMsg::Error(e));
                     break;
                 }
             }
@@ -148,7 +131,7 @@ impl Vision {
                         && has_diff(&sended_board, &last_board)
                     {
                         sended_board = last_board.clone();
-                        if let Err(_) = tx.send(Msg::Board(Box::new(sended_board.clone()))) {
+                        if let Err(_) = tx.send(VisionMsg::Board(Box::new(sended_board.clone()))) {
                             break;
                         }
                     }
@@ -159,7 +142,7 @@ impl Vision {
     }
 
     pub fn spawn(&mut self) {
-        let (tx, rx) = mpsc::channel::<Msg>();
+        let (tx, rx) = mpsc::channel::<VisionMsg>();
         let (quit_tx, quit_rx) = mpsc::channel::<()>();
         let camera = self.camera.take().unwrap();
         let settings = self.settings.clone();
@@ -171,18 +154,20 @@ impl Vision {
         self.quit_tx = Some(quit_tx);
     }
 
-    pub fn step(&mut self) {
+    pub fn step(&mut self) -> Option<Msg> {
         if let Some(rx) = &self.rx {
             match rx.try_recv() {
                 Ok(msg) => match msg {
-                    Msg::Board(brd) => (self.on_board_updated)(*brd),
-                    Msg::Error(e) => (self.on_error)(Error::ProcError(*e)),
+                    VisionMsg::Board(brd) => Some(Msg::Board(brd)),
+                    VisionMsg::Error(e) => Some(Msg::Error(Error::from(e))),
                 },
                 Err(e) => match e {
-                    TryRecvError::Disconnected => (self.on_error)(Error::Disconnected),
-                    TryRecvError::Empty => {}
+                    TryRecvError::Disconnected => Some(Msg::Error(Error::Disconnected)),
+                    TryRecvError::Empty => None,
                 },
             }
+        } else {
+            None
         }
     }
 }
