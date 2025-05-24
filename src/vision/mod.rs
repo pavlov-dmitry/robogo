@@ -19,7 +19,7 @@ impl Settings {
     pub fn default() -> Self {
         Settings {
             proc: proc::Settings::default(),
-            stable_board_time_ms: 1500,
+            stable_board_time_ms: 750,
         }
     }
 }
@@ -113,7 +113,10 @@ impl Vision {
             match Vision::read_board(&mut camera, &settings) {
                 Ok(maybe_board) => {
                     if let Some(brd) = maybe_board {
-                        if board::has_diff(&last_board, &brd) {
+                        let diff = board::diff(&last_board, &brd);
+                        if !last_board.is_empty() && brd.is_empty() {
+                            last_board_time = std::time::SystemTime::now();
+                        } else if !diff.is_empty() {
                             last_board = brd;
                             last_board_time = std::time::SystemTime::now();
                             last_board_updated = true;

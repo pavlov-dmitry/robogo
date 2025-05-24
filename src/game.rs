@@ -3,6 +3,7 @@ use super::katago;
 use super::speech::ToSpeech;
 
 use std::collections::LinkedList;
+use std::fmt::Display;
 
 #[derive(Default)]
 pub struct WrongStones {
@@ -76,6 +77,7 @@ impl Game {
 
     pub fn on_human_update_board(&mut self, board: Box<Board>) {
         self.current_board = *board;
+        println!("{}", self.current_board);
         match self.state {
             State::WaitingHumanMove => self.check_human_move(),
             State::WaitingKatagoAcceptHumanMove => {}
@@ -102,6 +104,8 @@ impl Game {
 
     pub fn on_ai_move(&mut self, mv: Move) {
         self.last_ai_move = mv.clone();
+        println!("ai move: {}", self.last_ai_move);
+        self.say_about_last_move();
         if let Move::Resign = mv {
             self.set_state(State::Finished);
             self.send(Msg::GameFinished);
@@ -132,11 +136,7 @@ impl Game {
                 self.send(Msg::Error(Error::UnpredictableAiState))
             }
             State::WaitingAiMove => {
-                if self.check_on_exact_or_msg() {
-                    self.set_state(State::WaitingHumanMove);
-                } else {
-                    self.set_state(State::WaitingAiStoneOnBoard);
-                }
+                self.set_state(State::WaitingAiStoneOnBoard);
             }
             State::WaitingAiStoneOnBoard => self.send(Msg::Error(Error::UnpredictableAiState)),
             State::Finished => {}
@@ -144,7 +144,7 @@ impl Game {
     }
     pub fn step(&mut self) -> Option<Msg> {
         if let Ok(elapsed) = self.last_update_sended.elapsed() {
-            if elapsed > std::time::Duration::from_secs(5) {
+            if elapsed > std::time::Duration::from_secs(10) {
                 match self.state {
                     State::WaitingHumanMove => {
                         self.check_human_move();
@@ -152,7 +152,7 @@ impl Game {
                     }
                     State::WaitingAiStoneOnBoard => {
                         self.say_about_last_move();
-                        self.check_on_exact_or_msg();
+                        self.check_on_ai_move();
                     }
                     State::InvalidPostitionAfterAiAcceptedMove => {
                         self.check_on_exact_or_msg();
@@ -170,10 +170,14 @@ impl Game {
 
     fn set_state(&mut self, state: State) {
         self.state = state;
+        println!("state: {}", self.state);
     }
 
     fn get_board_diff(&self, from: &Board, to: &Board) -> BoardDiff {
         let actions = board::diff(from, to);
+        for a in &actions {
+            println!("{a}");
+        }
         let added_pos = |color: board::Color, actions: &Vec<Action>| {
             actions
                 .iter()
@@ -248,6 +252,34 @@ impl Game {
         }
     }
 
+    fn check_on_ai_move(&mut self) {
+        let board_diff = self.get_board_diff(&self.ai_state.board, &self.current_board);
+        // если не хватает только камня ai то ничего не говорим
+        if board_diff.ai_stones_removed.len() == 1
+            && board_diff.ai_stones_added.is_empty()
+            && board_diff.human_stones_added.is_empty()
+            && board_diff.human_stones_removed.is_empty()
+        {
+            if let Move::Stone(pos) = self.last_ai_move {
+                if board_diff.ai_stones_removed[0] == pos {
+                    return;
+                }
+            }
+        }
+        let mut wrong_stones = WrongStones::default();
+        wrong_stones
+            .invalid
+            .extend(board_diff.human_stones_added.iter());
+        wrong_stones
+            .invalid
+            .extend(board_diff.ai_stones_added.iter());
+        wrong_stones
+            .missing
+            .extend(board_diff.human_stones_removed.iter());
+        self.send(Msg::WrongStones(wrong_stones));
+        self.last_update_sended = std::time::SystemTime::now();
+    }
+
     fn check_on_exact_or_msg(&mut self) -> bool {
         let board_diff = self.get_board_diff(&self.ai_state.board, &self.current_board);
         if board_diff.is_empty() {
@@ -297,5 +329,20 @@ impl ToSpeech for WrongStones {
             }
         }
         result
+    }
+}
+
+impl Display for State {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            State::WaitingHumanMove => write!(f, "waiting human move"),
+            State::WaitingKatagoAcceptHumanMove => write!(f, "waiting katago accept human move"),
+            State::InvalidPostitionAfterAiAcceptedMove => {
+                write!(f, "invalid position after ai accepted move")
+            }
+            State::WaitingAiMove => write!(f, "waiting ai move"),
+            State::WaitingAiStoneOnBoard => write!(f, "waiting ai stone on board"),
+            State::Finished => write!(f, "finished"),
+        }
     }
 }

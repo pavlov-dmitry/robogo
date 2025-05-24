@@ -31,7 +31,7 @@ impl From<Color> for Cell {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct Pos {
     x: usize,
     y: usize,
@@ -51,16 +51,23 @@ pub enum Move {
 
 pub struct ParsePositionError;
 
+static Y_LETTERS: &str = "ABCDEFGHJKLMNOPQRST";
+
 impl FromStr for Pos {
     type Err = ParsePositionError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.len() > 1 {
-            let char = s.as_bytes()[0];
-            let x = (char - 65) as usize;
-            let num_str = s.get(1..).ok_or_else(|| ParsePositionError)?;
-            let y = num_str.parse::<usize>().map_err(|_| ParsePositionError)?;
-            return Ok(Pos { x, y });
+            let char = s.chars().nth(0).expect("WTF: len() > 1");
+            let found = Y_LETTERS.chars().enumerate().find(|(_, c)| *c == char);
+            if let Some((pos, _)) = found {
+                let x = pos;
+                let num_str = s.get(1..).ok_or_else(|| ParsePositionError)?;
+                let y = num_str.parse::<i32>().map_err(|_| ParsePositionError)?;
+                if let Ok(y) = usize::try_from(y - 1) {
+                    return Ok(Pos { x, y });
+                }
+            }
         }
         Err(ParsePositionError)
     }
@@ -106,6 +113,10 @@ impl Board {
     pub fn set(&mut self, pos: Pos, cell: Cell) {
         let idx = self.pos2idx(pos);
         self.board[idx] = cell;
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.board.iter().all(|Cell(c)| c.is_none())
     }
 }
 
@@ -175,7 +186,7 @@ impl Display for Board {
         writeln!(f)?;
         write!(f, "    ")?;
         for col in 0..self.size {
-            let ch = char::from_u32(65 + col as u32).expect("invalid to char conversion");
+            let ch = Y_LETTERS.chars().nth(col).expect("invalid to column by Y");
             write!(f, "{} ", ch)?;
         }
         writeln!(f)?;
@@ -185,7 +196,10 @@ impl Display for Board {
 
 impl Display for Pos {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let letter = char::from_u32(65 + self.x as u32).expect("invalid to char conversion");
+        let letter = Y_LETTERS
+            .chars()
+            .nth(self.x)
+            .expect("Invalid X, more than expected");
         write!(f, "{}{}", letter, self.y + 1)
     }
 }

@@ -31,18 +31,18 @@ pub struct Settings {
 impl Settings {
     pub fn default() -> Settings {
         Settings {
-            binary_threshold: 120.,
+            binary_threshold: 100.,
             min_board_border_perimeter: 2500.,
             board_width: 1000,
             board_height: 1000,
             stones_left_shift: 17.,
             stones_right_shift: 16.,
-            stones_top_shift: 17.,
+            stones_top_shift: 15.,
             stones_bottom_shift: 16.,
-            stone_radius: 14,
+            stone_radius: 13,
             white_stone_threshold: 190,
             black_stone_threshold: 60,
-            min_color_threshold: 12,
+            min_color_threshold: 16,
             is_dump_steps: true,
             dump_dir: String::from("./vision_dump/"),
         }
