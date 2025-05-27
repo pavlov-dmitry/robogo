@@ -35,7 +35,7 @@ impl From<game::Error> for Error {
     }
 }
 
-fn main() -> Result<()> {
+fn game() -> Result<()> {
     let mut game = game::Game::new();
     let mut katago = katago::Katago::new(katago::Settings::default())?;
     let mut vision = vision::Vision::new(vision::Settings::default())?;
@@ -89,4 +89,14 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn main() -> Result<()> {
+    if let Some(arg1) = std::env::args().nth(1) {
+        if arg1 == "camera" {
+            vision::camera_mode()?;
+            return Ok(());
+        }
+    }
+    game()
 }

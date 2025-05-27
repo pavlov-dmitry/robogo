@@ -6,6 +6,8 @@ use std::thread::JoinHandle;
 use super::board::{self, Board, Cell, Pos, has_diff};
 
 use opencv::core::Mat;
+use opencv::highgui;
+use opencv::imgcodecs;
 use opencv::prelude::*;
 use opencv::videoio::{self, VideoCapture};
 
@@ -184,4 +186,43 @@ impl Drop for Vision {
             let _ = handler.join();
         }
     }
+}
+
+pub fn camera_mode() -> Result<()> {
+    let mut cam = VideoCapture::new(0, videoio::CAP_ANY)?;
+    if !cam.is_opened()? {
+        return Err(Error::CameraNotOpened);
+    }
+    let width_success = cam.set(videoio::CAP_PROP_FRAME_WIDTH, 1920.0)?;
+    let height_success = cam.set(videoio::CAP_PROP_FRAME_HEIGHT, 1080.0)?;
+    if !width_success || !height_success {
+        return Err(Error::CameraSetParamsError);
+    }
+
+    highgui::named_window("Camera", highgui::WINDOW_FULLSCREEN)?;
+    let mut frame = Mat::default();
+    let mut photo_count = 1;
+
+    loop {
+        cam.read(&mut frame)?;
+        if frame.empty() {
+            continue;
+        }
+
+        highgui::imshow("Camera", &frame)?;
+
+        let key = highgui::wait_key(10)?;
+        match key {
+            32 => {
+                // Пробел
+                let filename = format!("photo_{photo_count}.jpg");
+                imgcodecs::imwrite(&filename, &frame, &opencv::core::Vector::new())?;
+                photo_count += 1;
+            }
+            27 => break, // Esc
+            _ => {}
+        }
+    }
+
+    Ok(())
 }
