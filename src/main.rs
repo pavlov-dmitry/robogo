@@ -91,11 +91,29 @@ fn game() -> Result<()> {
     Ok(())
 }
 
+fn vision() -> Result<()> {
+    let mut vision = vision::Vision::new(vision::Settings::default())?;
+    vision.spawn();
+
+    loop {
+        if let Some(msg) = vision.step() {
+            match msg {
+                vision::Msg::Board(brd) => println!("{brd}"),
+                vision::Msg::Error(e) => return Err(Error::from(e)),
+            }
+        }
+
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+}
+
 fn main() -> Result<()> {
     if let Some(arg1) = std::env::args().nth(1) {
         if arg1 == "camera" {
             vision::camera_mode()?;
             return Ok(());
+        } else if arg1 == "vision" {
+            return vision();
         }
     }
     game()

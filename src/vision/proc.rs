@@ -24,8 +24,8 @@ pub struct Settings {
     white_stone_threshold: u8,
     black_stone_threshold: u8,
     min_color_threshold: u8,
-    is_dump_steps: bool,
-    dump_dir: String,
+    pub is_dump_steps: bool,
+    pub dump_dir: String,
 }
 
 impl Settings {

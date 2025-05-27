@@ -1,11 +1,12 @@
 mod proc;
+use chrono::Local;
 
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread::JoinHandle;
 
 use super::board::{self, Board, Cell, Pos, has_diff};
 
-use opencv::core::Mat;
+use opencv::core::{self, Mat};
 use opencv::highgui;
 use opencv::imgcodecs;
 use opencv::prelude::*;
@@ -88,6 +89,14 @@ impl Vision {
             return Ok(None);
         }
 
+        if settings.proc.is_dump_steps {
+            opencv::imgcodecs::imwrite(
+                &(settings.proc.dump_dir.clone() + "origin.jpg"),
+                &frame,
+                &core::Vector::default(),
+            )?;
+        }
+
         if let Some(border) = proc::find_board_border(&settings.proc, &frame)? {
             let warped_img = proc::warp_board_by_border(&settings.proc, &border, &frame)?;
             let board = proc::find_stones(&settings.proc, &warped_img, 19)?;
@@ -116,9 +125,12 @@ impl Vision {
                 Ok(maybe_board) => {
                     if let Some(brd) = maybe_board {
                         let diff = board::diff(&last_board, &brd);
-                        if !last_board.is_empty() && brd.is_empty() {
-                            last_board_time = std::time::SystemTime::now();
-                        } else if !diff.is_empty() {
+                        // специальный режим если изменений больше одного камня отбросить фотографии в отдеьлную папку
+                        if settings.proc.is_dump_steps && diff.len() > 1 {
+                            let dst = format!("./vision_errors/{}/", timestamp());
+                            let _ = copy_dir_all(&settings.proc.dump_dir, dst);
+                        }
+                        if !diff.is_empty() {
                             last_board = brd;
                             last_board_time = std::time::SystemTime::now();
                             last_board_updated = true;
@@ -201,7 +213,6 @@ pub fn camera_mode() -> Result<()> {
 
     highgui::named_window("Camera", highgui::WINDOW_FULLSCREEN)?;
     let mut frame = Mat::default();
-    let mut photo_count = 1;
 
     loop {
         cam.read(&mut frame)?;
@@ -215,9 +226,8 @@ pub fn camera_mode() -> Result<()> {
         match key {
             32 => {
                 // Пробел
-                let filename = format!("photo_{photo_count}.jpg");
+                let filename = format!("photo_{}.jpg", timestamp());
                 imgcodecs::imwrite(&filename, &frame, &opencv::core::Vector::new())?;
-                photo_count += 1;
             }
             27 => break, // Esc
             _ => {}
@@ -225,4 +235,30 @@ pub fn camera_mode() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn copy_dir_all(
+    src: impl AsRef<std::path::Path>,
+    dst: impl AsRef<std::path::Path>,
+) -> std::io::Result<()> {
+    std::fs::create_dir_all(&dst)?;
+
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+
+        let ty = entry.file_type()?;
+
+        if ty.is_dir() {
+            copy_dir_all(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        } else {
+            std::fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        }
+    }
+
+    Ok(())
+}
+
+fn timestamp() -> String {
+    let now = Local::now();
+    format!("{}", now.format("%F_%T%.3f"))
 }
