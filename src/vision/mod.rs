@@ -211,7 +211,7 @@ pub fn camera_mode() -> Result<()> {
         return Err(Error::CameraSetParamsError);
     }
 
-    highgui::named_window("Camera", highgui::WINDOW_FULLSCREEN)?;
+    highgui::named_window("Camera", highgui::WINDOW_NORMAL)?;
     let mut frame = Mat::default();
 
     loop {
