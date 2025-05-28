@@ -1,11 +1,14 @@
 use opencv::{
-    Result,
-    core::{self, Point, Point2f, Scalar, Size, Vector},
-    imgproc,
+    Result, calib3d,
+    core::{self, Point, Point2f, Point3f, Scalar, Size, Vector},
+    imgcodecs, imgproc,
     prelude::*,
 };
 
 use super::{Board, Cell, Pos};
+
+static CAMERA_MATRIX: &str = "camera_matrix";
+static DISTORTION_COEFFICIENTS: &str = "distortion_coefficients";
 
 type Polygon = Vector<Point>;
 pub type Error = opencv::Error;
@@ -277,4 +280,139 @@ pub fn find_stones(settings: &Settings, img: &Mat, board_size: usize) -> Result<
         )?;
     }
     Ok(board)
+}
+
+pub struct CameraCalibration {
+    camera_matrix: Mat,
+    dist_coeffs: Mat,
+}
+
+impl CameraCalibration {
+    pub fn new() -> Self {
+        CameraCalibration {
+            camera_matrix: Mat::default(),
+            dist_coeffs: Mat::default(),
+        }
+    }
+
+    pub fn save(&self, filename: &str) -> Result<()> {
+        let mut fs = core::FileStorage::new(
+            filename,
+            core::FileStorage_WRITE | core::FileStorage_FORMAT_JSON,
+            "",
+        )?;
+
+        fs.write_mat(CAMERA_MATRIX, &self.camera_matrix)?;
+        fs.write_mat(DISTORTION_COEFFICIENTS, &self.dist_coeffs)?;
+        fs.release()?;
+        Ok(())
+    }
+
+    pub fn load(filename: &str) -> Result<CameraCalibration> {
+        let fs = core::FileStorage::new(
+            filename,
+            core::FileStorage_READ | core::FileStorage_FORMAT_JSON,
+            "",
+        )?;
+
+        Ok(CameraCalibration {
+            camera_matrix: fs.get(CAMERA_MATRIX)?.mat()?,
+            dist_coeffs: fs.get(DISTORTION_COEFFICIENTS)?.mat()?,
+        })
+    }
+}
+
+pub fn calibrate_by(photo_dir: &str, images_count: u32) -> Result<CameraCalibration> {
+    let board_size = core::Size::new(9, 6);
+    let square_size = 25.0;
+
+    let mut object_points: Vector<Vector<Point3f>> = Vector::new();
+    let mut image_points: Vector<Vector<Point2f>> = Vector::new();
+
+    let mut obj_corners: Vector<Point3f> = Vector::new();
+    for y in 0..board_size.height {
+        for x in 0..board_size.width {
+            obj_corners.push(Point3f::new(
+                x as f32 * square_size,
+                y as f32 * square_size,
+                0.0,
+            ));
+        }
+    }
+
+    let mut success_calibrations = 0;
+    let mut cols = 0;
+    let mut rows = 0;
+
+    for i in 1..=images_count {
+        let filename = format!("{photo_dir}/{i}.jpg");
+        let img = imgcodecs::imread(&filename, imgcodecs::IMREAD_COLOR)?;
+        let img = convert_to_grayscale(&img)?;
+        println!("{filename} загружен");
+        cols = img.cols();
+        rows = img.rows();
+
+        if img.empty() {
+            println!("Не удалось загрузить {filename}");
+            continue;
+        }
+
+        let mut corners: Vector<Point2f> = Vector::new();
+        let found = calib3d::find_chessboard_corners(
+            &img,
+            board_size,
+            &mut corners,
+            calib3d::CALIB_CB_ADAPTIVE_THRESH + calib3d::CALIB_CB_NORMALIZE_IMAGE,
+        )?;
+        println!("Попытка найти шахматную доску: {found}");
+
+        if found {
+            imgproc::corner_sub_pix(
+                &img,
+                &mut corners,
+                core::Size::new(11, 11),
+                core::Size::new(-1, -1),
+                core::TermCriteria::new(
+                    core::TermCriteria_EPS + core::TermCriteria_MAX_ITER,
+                    30,
+                    0.001,
+                )?,
+            )?;
+
+            object_points.push(obj_corners.clone());
+            image_points.push(corners);
+            success_calibrations += 1;
+        }
+    }
+
+    println!("Успешно обработано {success_calibrations} изображений");
+
+    let mut camera_calibration = CameraCalibration::new();
+    let mut rvecs = Vector::<Mat>::new();
+    let mut tvecs = Vector::<Mat>::new();
+
+    calib3d::calibrate_camera_def(
+        &object_points,
+        &image_points,
+        core::Size::new(cols, rows),
+        &mut camera_calibration.camera_matrix,
+        &mut camera_calibration.dist_coeffs,
+        &mut rvecs,
+        &mut tvecs,
+    )?;
+
+    println!("Калибровка завершена");
+
+    Ok(camera_calibration)
+}
+
+pub fn undistord(img: &Mat, camera_calibration: &CameraCalibration) -> Result<Mat> {
+    let mut undistorted = Mat::default();
+    calib3d::undistort_def(
+        &img,
+        &mut undistorted,
+        &camera_calibration.camera_matrix,
+        &camera_calibration.dist_coeffs,
+    )?;
+    Ok(undistorted)
 }
