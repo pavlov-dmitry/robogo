@@ -8,6 +8,7 @@ use super::board::{self, Color, Move};
 use gtp::Gtp;
 pub use gtp::{Settings, State};
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub enum Error {
     Gtp(gtp::Error),

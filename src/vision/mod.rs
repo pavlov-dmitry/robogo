@@ -37,6 +37,7 @@ pub enum Msg {
     Error(Error),
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub enum Error {
     ProcError(proc::Error),

@@ -31,6 +31,7 @@ impl Settings {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub enum Error {
     Io(io::Error),

@@ -69,7 +69,13 @@ fn game() -> Result<()> {
             }
         }
 
-        speech.step();
+        // обработка сообщений от подсистемы синтеза речи
+        if let Some(msg) = speech.step() {
+            match msg {
+                speech::Msg::Error(e) => return Err(Error::from(e)),
+            }
+        }
+
         if nothing_todo {
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
@@ -107,10 +113,15 @@ fn main() -> Result<()> {
         }
     } else {
         // по дефолту сразу переходиим к игре
-        game()
+        let result = game();
+        if let Err(e) = result {
+            println!("Error: {:?}", e);
+        }
+        Ok(())
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 enum Error {
     Katago(katago::Error),
