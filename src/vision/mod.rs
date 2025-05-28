@@ -6,7 +6,7 @@ use std::thread::JoinHandle;
 
 use super::board::{self, Board, Cell, Pos, has_diff};
 
-use opencv::core::{self, Mat};
+use opencv::core::Mat;
 use opencv::highgui;
 use opencv::imgcodecs;
 use opencv::prelude::*;
@@ -88,14 +88,6 @@ impl Vision {
         camera.read(&mut frame)?;
         if frame.empty() {
             return Ok(None);
-        }
-
-        if settings.proc.is_dump_steps {
-            opencv::imgcodecs::imwrite(
-                &(settings.proc.dump_dir.clone() + "origin.jpg"),
-                &frame,
-                &core::Vector::default(),
-            )?;
         }
 
         if let Some(border) = proc::find_board_border(&settings.proc, &frame)? {

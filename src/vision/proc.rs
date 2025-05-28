@@ -115,14 +115,14 @@ pub fn find_board_border(settings: &Settings, img: &Mat) -> Result<Option<Polygo
     }
 
     if settings.is_dump_steps {
-        let mut img = Mat::default();
-        imgproc::cvt_color(&gray, &mut img, imgproc::COLOR_GRAY2BGR, 0)?;
+        let mut img_with_border = Mat::default();
+        imgproc::cvt_color(&gray, &mut img_with_border, imgproc::COLOR_GRAY2BGR, 0)?;
         if let Some(poly) = &best_polygon {
             // Рисуем контуры на исходном изображении
             let mut polygon_for_draw: Vector<Vector<Point>> = Vector::new();
             polygon_for_draw.push(poly.clone());
             imgproc::draw_contours(
-                &mut img,
+                &mut img_with_border,
                 &polygon_for_draw,
                 -1,                                // Индекс контура (-1 = все контуры)
                 Scalar::new(0.0, 255.0, 0.0, 0.0), // Зелёный цвет
@@ -135,6 +135,11 @@ pub fn find_board_border(settings: &Settings, img: &Mat) -> Result<Option<Polygo
         }
         opencv::imgcodecs::imwrite(
             &(settings.dump_dir.clone() + "border.jpg"),
+            &img_with_border,
+            &core::Vector::default(),
+        )?;
+        opencv::imgcodecs::imwrite(
+            &(settings.dump_dir.clone() + "origin.jpg"),
             &img,
             &core::Vector::default(),
         )?;
