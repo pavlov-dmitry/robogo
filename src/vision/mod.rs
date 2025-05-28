@@ -238,6 +238,24 @@ pub fn camera_mode() -> Result<()> {
     Ok(())
 }
 
+pub fn parse_board_from(photo: std::path::PathBuf, settings: &Settings) -> Result<Option<Board>> {
+    let filename = photo
+        .as_os_str()
+        .to_str()
+        .expect("Ожидал нормальный пусть к файлу");
+    let img = imgcodecs::imread(filename, imgcodecs::IMREAD_COLOR)?;
+    let border = proc::find_board_border(&settings.proc, &img)?;
+    let board = match border {
+        Some(border) => {
+            let warped = proc::warp_board_by_border(&settings.proc, &border, &img)?;
+            let board = proc::find_stones(&settings.proc, &warped, 19)?;
+            Some(board)
+        }
+        None => None,
+    };
+    Ok(board)
+}
+
 fn copy_dir_all(
     src: impl AsRef<std::path::Path>,
     dst: impl AsRef<std::path::Path>,

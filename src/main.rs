@@ -20,6 +20,9 @@ enum Commands {
 
     /// Режим тестирования компьютерного зрения. Распознаёт позицию на доске.
     Vision,
+
+    /// Режим распознования доски по фотографии
+    ParseBoard { photo: std::path::PathBuf },
 }
 
 fn game() -> Result<()> {
@@ -100,6 +103,16 @@ fn vision() -> Result<()> {
     }
 }
 
+fn parse_board(photo: std::path::PathBuf) -> Result<()> {
+    let settings = vision::Settings::default();
+    let board = vision::parse_board_from(photo, &settings)?;
+    match board {
+        Some(brd) => println!("{brd}"),
+        None => println!("Доска не найдена."),
+    }
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     if let Some(cmd) = cli.command {
@@ -110,6 +123,8 @@ fn main() -> Result<()> {
             }
 
             Commands::Vision => vision(),
+
+            Commands::ParseBoard { photo } => parse_board(photo),
         }
     } else {
         // по дефолту сразу переходиим к игре
