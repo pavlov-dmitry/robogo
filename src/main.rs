@@ -22,7 +22,13 @@ enum Commands {
     Vision,
 
     /// Режим распознования доски по фотографии
-    ParseBoard { photo: std::path::PathBuf },
+    ParseBoard { photo_filename: String },
+
+    /// Режим калибровки камеры по фото (нужен путь на папку с файлми 1.jpg, 2.jpg и т.д. и их количество)
+    Calibrate { photo_dir: String, count: u32 },
+
+    ///Тест калибровки камеры. Отображает фото с применённой калибровкой
+    TestCalibration { photo_filename: String },
 }
 
 fn game() -> Result<()> {
@@ -103,7 +109,7 @@ fn vision() -> Result<()> {
     }
 }
 
-fn parse_board(photo: std::path::PathBuf) -> Result<()> {
+fn parse_board(photo: &str) -> Result<()> {
     let settings = vision::Settings::default();
     let board = vision::parse_board_from(photo, &settings)?;
     match board {
@@ -124,7 +130,17 @@ fn main() -> Result<()> {
 
             Commands::Vision => vision(),
 
-            Commands::ParseBoard { photo } => parse_board(photo),
+            Commands::ParseBoard { photo_filename } => parse_board(&photo_filename),
+
+            Commands::Calibrate { photo_dir, count } => {
+                vision::calibrate_by(&photo_dir, count)?;
+                Ok(())
+            }
+
+            Commands::TestCalibration { photo_filename } => {
+                vision::test_calibration(&photo_filename)?;
+                Ok(())
+            }
         }
     } else {
         // по дефолту сразу переходиим к игре
