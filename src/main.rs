@@ -4,35 +4,22 @@ mod katago;
 mod speech;
 mod vision;
 
-#[derive(Debug)]
-enum Error {
-    Katago(katago::Error),
-    Speech(speech::Error),
-    Vision(vision::Error),
-    Game(game::Error),
+use clap::{Parser, Subcommand};
+
+#[derive(Parser)]
+#[command(version, about, long_about=None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
 }
 
-type Result<T> = std::result::Result<T, Error>;
+#[derive(Subcommand)]
+enum Commands {
+    /// Режим фотоаппарата, для настройки камеры.
+    Camera,
 
-impl From<katago::Error> for Error {
-    fn from(value: katago::Error) -> Self {
-        Error::Katago(value)
-    }
-}
-impl From<speech::Error> for Error {
-    fn from(value: speech::Error) -> Self {
-        Error::Speech(value)
-    }
-}
-impl From<vision::Error> for Error {
-    fn from(value: vision::Error) -> Self {
-        Error::Vision(value)
-    }
-}
-impl From<game::Error> for Error {
-    fn from(value: game::Error) -> Self {
-        Error::Game(value)
-    }
+    /// Режим тестирования компьютерного зрения. Распознаёт позицию на доске.
+    Vision,
 }
 
 fn game() -> Result<()> {
@@ -108,13 +95,49 @@ fn vision() -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    if let Some(arg1) = std::env::args().nth(1) {
-        if arg1 == "camera" {
-            vision::camera_mode()?;
-            return Ok(());
-        } else if arg1 == "vision" {
-            return vision();
+    let cli = Cli::parse();
+    if let Some(cmd) = cli.command {
+        match cmd {
+            Commands::Camera => {
+                vision::camera_mode()?;
+                Ok(())
+            }
+
+            Commands::Vision => vision(),
         }
+    } else {
+        // по дефолту сразу переходиим к игре
+        game()
     }
-    game()
+}
+
+#[derive(Debug)]
+enum Error {
+    Katago(katago::Error),
+    Speech(speech::Error),
+    Vision(vision::Error),
+    Game(game::Error),
+}
+
+type Result<T> = std::result::Result<T, Error>;
+
+impl From<katago::Error> for Error {
+    fn from(value: katago::Error) -> Self {
+        Error::Katago(value)
+    }
+}
+impl From<speech::Error> for Error {
+    fn from(value: speech::Error) -> Self {
+        Error::Speech(value)
+    }
+}
+impl From<vision::Error> for Error {
+    fn from(value: vision::Error) -> Self {
+        Error::Vision(value)
+    }
+}
+impl From<game::Error> for Error {
+    fn from(value: game::Error) -> Self {
+        Error::Game(value)
+    }
 }
