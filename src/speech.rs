@@ -18,7 +18,17 @@ impl Settings {
     }
 }
 
-pub type Error = io::Error;
+#[allow(dead_code)]
+#[derive(Debug)]
+pub enum Error {
+    Io(io::Error),
+}
+
+impl From<io::Error> for Error {
+    fn from(value: io::Error) -> Self {
+        Error::Io(value)
+    }
+}
 pub enum Msg {
     Error(Error),
 }
@@ -55,7 +65,7 @@ impl Speech {
                         self.current = None;
                     }
                 }
-                Err(e) => return Some(Msg::Error(e)),
+                Err(e) => return Some(Msg::Error(Error::from(e))),
             }
         }
         if self.current.is_none() {
@@ -67,7 +77,7 @@ impl Speech {
                     Ok(child) => {
                         self.current = Some(child);
                     }
-                    Err(e) => return Some(Msg::Error(e)),
+                    Err(e) => return Some(Msg::Error(Error::from(e))),
                 }
             }
         }

@@ -5,6 +5,7 @@ mod speech;
 mod vision;
 
 use clap::{Parser, Subcommand};
+use std::str::FromStr;
 
 #[derive(Parser)]
 #[command(version, about, long_about=None)]
@@ -29,6 +30,9 @@ enum Commands {
 
     ///Тест калибровки камеры. Отображает фото с применённой калибровкой
     TestCalibration { photo_filename: String },
+
+    ///Тесты зрения. на вход папка с подпаками тестами где есть photo.jpg и board.txt. Если board.txt нет значит ничего не должно распозноваться
+    VisionTests { tests_dir: String },
 }
 
 fn game() -> Result<()> {
@@ -119,6 +123,49 @@ fn parse_board(photo: &str) -> Result<()> {
     Ok(())
 }
 
+fn vision_tests(tests_dir: &str) -> Result<()> {
+    let mut success_count = 0;
+    let mut failed_count = 0;
+    for entry in std::fs::read_dir(tests_dir)? {
+        let entry = entry?;
+        let entry_type = entry.file_type()?;
+        if entry_type.is_dir() {
+            let name = entry.file_name();
+            println!("Test {}", name.display());
+            let settings = vision::Settings::default();
+            let photo_filename = format!("{}/photo.jpg", entry.path().as_os_str().display());
+            let board_from_vision = vision::parse_board_from(&photo_filename, &settings)?;
+            let board_filename = format!("{}/board.txt", entry.path().as_os_str().display());
+            let is_board_file_exists = std::fs::exists(&board_filename)?;
+            let mut test_success = false;
+            match board_from_vision {
+                Some(vision_board) => {
+                    println!("VISION:\n{}", vision_board);
+                    let board_txt = std::fs::read_to_string(board_filename)?;
+                    let board = board::Board::from_str(&board_txt)?;
+                    println!("SOURCE BOARD:\n{}", board);
+                    test_success = vision_board == board;
+                }
+                None => {
+                    println!("VISION: None");
+                    println!("Source board exists: {is_board_file_exists}");
+                    test_success = !is_board_file_exists;
+                }
+            }
+            if test_success {
+                success_count += 1;
+                println!("Test {} success.", name.display());
+            } else {
+                failed_count += 1;
+                println!("Test {} FAILED!", name.display());
+            }
+            println!("---------------------------------------------\n");
+        }
+    }
+    println!("All tests finished. {success_count} success, {failed_count} failed.");
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     if let Some(cmd) = cli.command {
@@ -141,6 +188,8 @@ fn main() -> Result<()> {
                 vision::test_calibration(&photo_filename)?;
                 Ok(())
             }
+
+            Commands::VisionTests { tests_dir } => vision_tests(&tests_dir),
         }
     } else {
         // по дефолту сразу переходиим к игре
@@ -159,6 +208,8 @@ enum Error {
     Speech(speech::Error),
     Vision(vision::Error),
     Game(game::Error),
+    BoardParseError,
+    Io(std::io::Error),
 }
 
 type Result<T> = std::result::Result<T, Error>;
@@ -181,5 +232,15 @@ impl From<vision::Error> for Error {
 impl From<game::Error> for Error {
     fn from(value: game::Error) -> Self {
         Error::Game(value)
+    }
+}
+impl From<board::BoardParseError> for Error {
+    fn from(_: board::BoardParseError) -> Self {
+        Error::BoardParseError
+    }
+}
+impl From<std::io::Error> for Error {
+    fn from(value: std::io::Error) -> Self {
+        Error::Io(value)
     }
 }

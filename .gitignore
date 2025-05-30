@@ -3,4 +3,5 @@
 /katago
 /vision_errors
 /etc
-*.jpg
+/calibration
+/*.jpg

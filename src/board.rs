@@ -73,7 +73,7 @@ impl FromStr for Pos {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Board {
     board: Vec<Cell>,
     size: usize,
@@ -229,5 +229,49 @@ impl Display for Action {
             Action::Add(pos, stone) => write!(f, "Add to {} {} stone", pos, stone),
             Action::Remove(pos, stone) => write!(f, "Remove from {} {} stone", pos, stone),
         }
+    }
+}
+
+pub struct BoardParseError;
+
+impl FromStr for Board {
+    type Err = BoardParseError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let board_size = s
+            .get(..2)
+            .ok_or(BoardParseError)?
+            .trim()
+            .parse::<usize>()
+            .map_err(|_| BoardParseError)?;
+
+        let mut board = Board::new_with_size(board_size);
+        let mut parse_line = |line: &str, y: usize| {
+            for i in 0..board_size {
+                let idx = 4 + i * 2;
+                match line.get(idx..idx + 1) {
+                    Some(ch) => {
+                        let cell = if ch == "B" {
+                            Cell::black_stone()
+                        } else if ch == "W" {
+                            Cell::white_stone()
+                        } else {
+                            Cell::empty()
+                        };
+                        board.set(Pos::new(i, y), cell);
+                    }
+                    None => return Err(BoardParseError),
+                }
+            }
+            Ok(())
+        };
+        for line_idx in 0..board_size {
+            match s.lines().nth(line_idx) {
+                Some(line) => {
+                    parse_line(line, board_size - line_idx - 1)?;
+                }
+                None => return Err(BoardParseError),
+            }
+        }
+        Ok(board)
     }
 }
