@@ -141,10 +141,15 @@ fn vision_tests(tests_dir: &str) -> Result<()> {
             match board_from_vision {
                 Some(vision_board) => {
                     println!("VISION:\n{}", vision_board);
-                    let board_txt = std::fs::read_to_string(board_filename)?;
-                    let board = board::Board::from_str(&board_txt)?;
-                    println!("SOURCE BOARD:\n{}", board);
-                    test_success = vision_board == board;
+                    if is_board_file_exists {
+                        let board_txt = std::fs::read_to_string(board_filename)?;
+                        let board = board::Board::from_str(&board_txt)?;
+                        println!("SOURCE BOARD:\n{}", board);
+                        test_success = vision_board == board;
+                    } else {
+                        println!("SOURCE BOARD DO NOT EXISTS");
+                        test_success = false;
+                    }
                 }
                 None => {
                     println!("VISION: None");
