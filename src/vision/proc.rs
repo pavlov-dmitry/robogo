@@ -15,7 +15,6 @@ pub type Error = opencv::Error;
 
 #[derive(Clone)]
 pub struct Settings {
-    binary_threshold: f64,
     min_board_border_perimeter: f64,
     board_width: i32,
     board_height: i32,
@@ -34,8 +33,7 @@ pub struct Settings {
 impl Settings {
     pub fn default() -> Settings {
         Settings {
-            binary_threshold: 100.,
-            min_board_border_perimeter: 2500.,
+            min_board_border_perimeter: 3200.,
             board_width: 1000,
             board_height: 1000,
             stones_left_shift: 17.,
@@ -64,12 +62,14 @@ pub fn find_board_border(settings: &Settings, img: &Mat) -> Result<Option<Polygo
     let gray = convert_to_grayscale(img)?;
     // бинаризация по порогу
     let mut binary = Mat::default();
-    imgproc::threshold(
+    imgproc::adaptive_threshold(
         &gray,
         &mut binary,
-        settings.binary_threshold,
         255.0,
+        imgproc::ADAPTIVE_THRESH_MEAN_C,
         imgproc::THRESH_BINARY_INV,
+        31,
+        7.,
     )?;
     if settings.is_dump_steps {
         opencv::imgcodecs::imwrite(
@@ -100,7 +100,7 @@ pub fn find_board_border(settings: &Settings, img: &Mat) -> Result<Option<Polygo
         }
         let mut polygon: Vector<Point> = Vector::new();
         // апроксимация полигонов
-        imgproc::approx_poly_dp(&contour, &mut polygon, 0.005 * perimeter, true)?;
+        imgproc::approx_poly_dp(&contour, &mut polygon, 0.002 * perimeter, true)?;
         // поиск четрехугольника
         if polygon.len() == 4 && imgproc::is_contour_convex(&polygon)? {
             // полигоны с нулевой точкой это полигоны на весь экран, такое нам не нужно
