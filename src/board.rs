@@ -95,7 +95,7 @@ impl Board {
         return res;
     }
 
-    pub fn pos2idx(&self, pos: Pos) -> usize {
+    fn pos2idx(&self, pos: Pos) -> usize {
         if pos.x >= self.size {
             panic!(
                 "invalid x position where board size={} and x={}",
@@ -113,10 +113,6 @@ impl Board {
     pub fn set(&mut self, pos: Pos, cell: Cell) {
         let idx = self.pos2idx(pos);
         self.board[idx] = cell;
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.board.iter().all(|Cell(c)| c.is_none())
     }
 }
 

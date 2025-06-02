@@ -70,6 +70,7 @@ impl Vision {
         if !cam.is_opened()? {
             return Err(Error::CameraNotOpened);
         }
+
         let width_success = cam.set(videoio::CAP_PROP_FRAME_WIDTH, 1920.0)?;
         let height_success = cam.set(videoio::CAP_PROP_FRAME_HEIGHT, 1080.0)?;
         if !width_success || !height_success {
@@ -120,11 +121,13 @@ impl Vision {
                 Ok(maybe_board) => {
                     if let Some(brd) = maybe_board {
                         let diff = board::diff(&last_board, &brd);
+
                         // специальный режим если изменений больше одного камня отбросить фотографии в отдеьлную папку
                         if settings.proc.is_dump_steps && diff.len() > 1 {
                             let dst = format!("./vision_errors/{}/", timestamp());
                             let _ = copy_dir_all(&settings.proc.dump_dir, dst);
                         }
+
                         if !diff.is_empty() {
                             last_board = brd;
                             last_board_time = std::time::SystemTime::now();
@@ -154,13 +157,20 @@ impl Vision {
     }
 
     pub fn spawn(&mut self) {
+        //создаём каналы управления и данными
         let (tx, rx) = mpsc::channel::<VisionMsg>();
         let (quit_tx, quit_rx) = mpsc::channel::<()>();
+
+        //данные для потока
         let camera = self.camera.take().unwrap();
         let settings = self.settings.clone();
+
+        //создаём поток
         let handler = std::thread::spawn(move || {
             Vision::main_loop(camera, settings, tx, quit_rx);
         });
+
+        //сохраняем себе вторые части каналов и хэндлер потока
         self.thread_handler = Some(handler);
         self.rx = Some(rx);
         self.quit_tx = Some(quit_tx);
