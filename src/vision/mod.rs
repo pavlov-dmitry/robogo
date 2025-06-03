@@ -17,14 +17,16 @@ static DEFAULT_CAMERA_CALIBRATION_PATH: &str = "./etc/camera_calibration.json";
 #[derive(Clone)]
 pub struct Settings {
     proc: proc::Settings,
-    stable_board_time_ms: u32,
+    single_stone_stable_board_time_ms: u32,
+    many_stones_stable_board_time_ms: u32,
 }
 
 impl Settings {
     pub fn default() -> Self {
         Settings {
             proc: proc::Settings::default(),
-            stable_board_time_ms: 750,
+            single_stone_stable_board_time_ms: 500,
+            many_stones_stable_board_time_ms: 1500,
         }
     }
 }
@@ -112,6 +114,7 @@ impl Vision {
         let mut last_board = Board::default();
         let mut last_board_time = std::time::SystemTime::now();
         let mut last_board_updated = false;
+        let mut is_only_one_stone_added_from_last_update = true;
 
         loop {
             if quit_rx.try_recv().is_ok() {
@@ -121,17 +124,23 @@ impl Vision {
                 Ok(maybe_board) => {
                     if let Some(brd) = maybe_board {
                         let diff = board::diff(&last_board, &brd);
-
-                        // специальный режим если изменений больше одного камня отбросить фотографии в отдеьлную папку
-                        if settings.proc.is_dump_steps && diff.len() > 1 {
-                            let dst = format!("./vision_errors/{}/", timestamp());
-                            let _ = copy_dir_all(&settings.proc.dump_dir, dst);
-                        }
+                        let is_only_one_stone_added = diff.len() == 1
+                            && match diff[0] {
+                                board::Action::Add(_, _) => true,
+                                _ => false,
+                            };
 
                         if !diff.is_empty() {
+                            // специальный режим если изменений больше одного камня отбросить фотографии в отдеьлную папку
+                            if settings.proc.is_dump_steps && !is_only_one_stone_added {
+                                let dst = format!("./vision_errors/{}/", timestamp());
+                                let _ = copy_dir_all(&settings.proc.dump_dir, dst);
+                            }
+
                             last_board = brd;
                             last_board_time = std::time::SystemTime::now();
                             last_board_updated = true;
+                            is_only_one_stone_added_from_last_update &= is_only_one_stone_added;
                         }
                     }
                 }
@@ -142,10 +151,16 @@ impl Vision {
             }
             if last_board_updated {
                 if let Ok(dur) = last_board_time.elapsed() {
-                    if dur.as_millis() > settings.stable_board_time_ms as u128
-                        && has_diff(&sended_board, &last_board)
-                    {
+                    let is_one_stone_time = is_only_one_stone_added_from_last_update
+                        && dur.as_millis() > settings.single_stone_stable_board_time_ms as u128;
+                    let is_many_stones_time = !is_only_one_stone_added_from_last_update
+                        && dur.as_millis() > settings.many_stones_stable_board_time_ms as u128;
+                    let is_time_to_send = is_one_stone_time || is_many_stones_time;
+
+                    if is_time_to_send && has_diff(&sended_board, &last_board) {
                         sended_board = last_board.clone();
+                        last_board_updated = false;
+                        is_only_one_stone_added_from_last_update = true;
                         if let Err(_) = tx.send(VisionMsg::Board(Box::new(sended_board.clone()))) {
                             break;
                         }
