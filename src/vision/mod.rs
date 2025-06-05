@@ -257,32 +257,29 @@ pub fn camera_mode() -> Result<()> {
 }
 
 pub fn parse_board_from(photo_filename: &str, settings: &Settings) -> Result<Option<Board>> {
-    let imgread_time = TimeMeasure::new("imgread");
+    let mut time_measure = TimeMeasure::tick();
     let img = imgcodecs::imread(photo_filename, imgcodecs::IMREAD_COLOR)?;
     let img = proc::convert_to_grayscale(&img)?;
-    drop(imgread_time);
+    time_measure.print_elapsed_ms_and_tick("image read");
 
-    let full_time = TimeMeasure::new("proc full time");
+    let mut full_proc_time_measure = TimeMeasure::tick();
 
-    let find_border_time = TimeMeasure::new("find_border");
     let border = proc::find_board_border(&settings.proc, &img)?;
-    drop(find_border_time);
+    time_measure.print_elapsed_ms_and_tick("find board border");
 
     let board = match border {
         Some(border) => {
-            let warped_time = TimeMeasure::new("warp");
             let warped = proc::warp_board_by_border(&settings.proc, &border, &img)?;
-            drop(warped_time);
+            time_measure.print_elapsed_ms_and_tick("warp board");
 
-            let find_stones_time = TimeMeasure::new("find_stones");
             let board = proc::find_stones(&settings.proc, &warped, 19)?;
-            drop(find_stones_time);
+            time_measure.print_elapsed_ms_and_tick("find stones");
 
             Some(board)
         }
         None => None,
     };
-    drop(full_time);
+    full_proc_time_measure.print_elapsed_ms_and_tick("full proc time");
     Ok(board)
 }
 

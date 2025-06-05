@@ -190,26 +190,22 @@ pub fn warp_board_by_border(settings: &Settings, border: &Polygon, img: &Mat) ->
 }
 
 pub struct TimeMeasure {
-    name: String,
     time: std::time::SystemTime,
 }
 
 impl TimeMeasure {
-    pub fn new(name: &str) -> TimeMeasure {
+    pub fn tick() -> TimeMeasure {
         TimeMeasure {
-            name: String::from(name),
             time: std::time::SystemTime::now(),
         }
     }
-}
 
-impl Drop for TimeMeasure {
-    fn drop(&mut self) {
-        println!(
-            "{}: {} ms",
-            self.name,
-            self.time.elapsed().unwrap().as_millis()
-        );
+    pub fn print_elapsed_ms_and_tick(&mut self, name: &str) {
+        match self.time.elapsed() {
+            Ok(t) => println!("{name}: {} ms.", t.as_millis()),
+            Err(_) => println!("\"{name}\" error measure time (maybe clock sync)"),
+        }
+        self.time = std::time::SystemTime::now();
     }
 }
 
@@ -269,7 +265,7 @@ pub fn find_stones(settings: &Settings, img: &Mat, board_size: usize) -> Result<
             if let Some(image) = &mut debug_img {
                 let rect =
                     core::Rect::new(center.x - radius, center.y - radius, radius * 2, radius * 2);
-                //рисуем кружочки
+                //рисуем прямоуголники в которых считали
                 imgproc::rectangle(
                     image,
                     rect,
