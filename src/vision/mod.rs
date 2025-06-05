@@ -94,6 +94,7 @@ impl Vision {
     fn read_board(camera: &mut VideoCapture, settings: &Settings) -> opencv::Result<Option<Board>> {
         let mut frame = Mat::default();
         camera.read(&mut frame)?;
+        let frame = proc::convert_to_grayscale(&frame)?;
         if frame.empty() {
             return Ok(None);
         }
