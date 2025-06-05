@@ -92,9 +92,7 @@ impl Game {
             }
             State::WaitingAiStoneOnBoard => {
                 if self.check_on_exact_or_msg() {
-                    self.send(Msg::Speech(String::from(
-                        "Спасибо. Были бы ручки я бы и сам поставил.",
-                    )));
+                    self.send(Msg::Speech(String::from("Спасибо.")));
                     self.set_state(State::WaitingHumanMove);
                 }
             }

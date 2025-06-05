@@ -1,6 +1,6 @@
 use opencv::{
     Result, calib3d,
-    core::{self, Point, Point2f, Point3f, Scalar, Size, Vector},
+    core::{self, Point, Point2f, Point2i, Point3f, Scalar, Size, Vector},
     imgcodecs, imgproc,
     prelude::*,
 };
@@ -25,7 +25,6 @@ pub struct Settings {
     stone_radius: i32,
     white_stone_threshold: u8,
     black_stone_threshold: u8,
-    min_color_threshold: u8,
     pub is_dump_steps: bool,
     pub dump_dir: String,
 }
@@ -40,10 +39,9 @@ impl Settings {
             stones_right_shift: 16.,
             stones_top_shift: 5.,
             stones_bottom_shift: 17.,
-            stone_radius: 13,
+            stone_radius: 12,
             white_stone_threshold: 190,
             black_stone_threshold: 60,
-            min_color_threshold: 16,
             is_dump_steps: true,
             dump_dir: String::from("./vision_dump/"),
         }
@@ -59,11 +57,10 @@ pub fn convert_to_grayscale(img: &Mat) -> Result<Mat> {
 
 // Если и возвращает то это полигон с 4мя точками
 pub fn find_board_border(settings: &Settings, img: &Mat) -> Result<Option<Polygon>> {
-    let gray = convert_to_grayscale(img)?;
     // бинаризация по порогу
     let mut binary = Mat::default();
     imgproc::adaptive_threshold(
-        &gray,
+        &img,
         &mut binary,
         255.0,
         imgproc::ADAPTIVE_THRESH_MEAN_C,
@@ -95,7 +92,7 @@ pub fn find_board_border(settings: &Settings, img: &Mat) -> Result<Option<Polygo
     for contour in contours {
         let perimeter = imgproc::arc_length(&contour, true)?;
         // сразу отсекаем полигоны раные всей картинке
-        if perimeter as i32 == (gray.cols() * 2 + gray.rows() * 2) {
+        if perimeter as i32 == (img.cols() * 2 + img.rows() * 2) {
             continue;
         }
         let mut polygon: Vector<Point> = Vector::new();
@@ -119,7 +116,7 @@ pub fn find_board_border(settings: &Settings, img: &Mat) -> Result<Option<Polygo
 
     if settings.is_dump_steps {
         let mut img_with_border = Mat::default();
-        imgproc::cvt_color(&gray, &mut img_with_border, imgproc::COLOR_GRAY2BGR, 0)?;
+        imgproc::cvt_color(&img, &mut img_with_border, imgproc::COLOR_GRAY2BGR, 0)?;
         if let Some(poly) = &best_polygon {
             // Рисуем контуры на исходном изображении
             let mut polygon_for_draw: Vector<Vector<Point>> = Vector::new();
@@ -192,19 +189,58 @@ pub fn warp_board_by_border(settings: &Settings, border: &Polygon, img: &Mat) ->
     Ok(warped)
 }
 
+pub struct TimeMeasure {
+    name: String,
+    time: std::time::SystemTime,
+}
+
+impl TimeMeasure {
+    pub fn new(name: &str) -> TimeMeasure {
+        TimeMeasure {
+            name: String::from(name),
+            time: std::time::SystemTime::now(),
+        }
+    }
+}
+
+impl Drop for TimeMeasure {
+    fn drop(&mut self) {
+        println!(
+            "{}: {} ms",
+            self.name,
+            self.time.elapsed().unwrap().as_millis()
+        );
+    }
+}
+
+fn square_mean(gray: &Mat, center: Point2i, radius: i32) -> u8 {
+    let min_x = std::cmp::max(center.x - radius, 0);
+    let max_x = std::cmp::min(center.x + radius, gray.cols());
+    let min_y = std::cmp::max(center.y - radius, 0);
+    let max_y = std::cmp::min(center.y + radius, gray.rows());
+    let mut summ: usize = 0;
+    let mut count: usize = 0;
+    for x in min_x..max_x {
+        for y in min_y..max_y {
+            unsafe {
+                if let Ok(val) = gray.at_2d_unchecked::<u8>(y, x) {
+                    summ += *val as usize;
+                    count += 1;
+                }
+            }
+        }
+    }
+    return (summ / count) as u8;
+}
+
 pub fn find_stones(settings: &Settings, img: &Mat, board_size: usize) -> Result<Board> {
     let mut board = Board::new_with_size(board_size);
-    // Создаём маску для круглой области
-    let mut mask = Mat::zeros(img.rows(), img.cols(), core::CV_8UC1)?.to_mat()?;
 
     let mut debug_img: Option<Mat> = if settings.is_dump_steps {
         Some(img.clone())
     } else {
         None
     };
-
-    let mut lab = Mat::default();
-    imgproc::cvt_color(&img, &mut lab, imgproc::COLOR_BGR2Lab, 0)?;
 
     let horz_shift = settings.stones_left_shift + settings.stones_right_shift;
     let horz_size = img.cols() - horz_shift as i32;
@@ -215,43 +251,28 @@ pub fn find_stones(settings: &Settings, img: &Mat, board_size: usize) -> Result<
 
     for x in 0..board_size {
         for y in 0..board_size {
-            let radius = settings.stone_radius; // Радиус круга
+            let radius = settings.stone_radius;
             let center_x = x as f64 * horz_step + horz_step / 2. + settings.stones_left_shift;
             let center_y = y as f64 * vert_step + vert_step / 2. + settings.stones_top_shift;
             let center = core::Point::new(center_x as i32, center_y as i32);
-            mask.set_to(&Scalar::all(0.0), &core::no_array())?;
-            imgproc::circle(
-                &mut mask,
-                center,
-                radius,
-                core::Scalar::all(255.0),
-                -1, // Заливка
-                imgproc::LINE_8,
-                0,
-            )?;
-            let mean = core::mean(&lab, &mask)?;
-            let l = mean[0] as u8;
-            let a = mean[1] as u8;
-            let b = mean[2] as u8;
-            let a = a as f64 - 128.;
-            let b = b as f64 - 128.;
-            let color = (a * a + b * b).sqrt() as u8;
+            let value = square_mean(&img, center, radius);
 
             let pos_y = board_size - y - 1;
-            if l < settings.black_stone_threshold && color <= settings.min_color_threshold {
+            if value < settings.black_stone_threshold {
                 board.set(Pos::new(x, pos_y), Cell::black_stone());
-            } else if l > settings.white_stone_threshold && color <= settings.min_color_threshold {
+            } else if value > settings.white_stone_threshold {
                 board.set(Pos::new(x, pos_y), Cell::white_stone());
             } else {
                 board.set(Pos::new(x, pos_y), Cell::empty());
             }
 
             if let Some(image) = &mut debug_img {
+                let rect =
+                    core::Rect::new(center.x - radius, center.y - radius, radius * 2, radius * 2);
                 //рисуем кружочки
-                imgproc::circle(
+                imgproc::rectangle(
                     image,
-                    center,
-                    radius,
+                    rect,
                     core::Scalar::new(0.0, 0.0, 255.0, 0.0),
                     1,
                     imgproc::LINE_8,
@@ -260,10 +281,10 @@ pub fn find_stones(settings: &Settings, img: &Mat, board_size: usize) -> Result<
                 // Подписываем значение
                 imgproc::put_text(
                     image,
-                    &format!("{}/{}", l, color),
+                    &format!("{value}"),
                     core::Point::new(center.x - 20, center.y),
                     imgproc::FONT_HERSHEY_SIMPLEX,
-                    0.35,
+                    0.4,
                     core::Scalar::new(255.0, 0.0, 255.0, 0.0),
                     1,
                     imgproc::LINE_AA,

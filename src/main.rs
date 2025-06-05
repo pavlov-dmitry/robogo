@@ -114,7 +114,8 @@ fn vision() -> Result<()> {
 }
 
 fn parse_board(photo: &str) -> Result<()> {
-    let settings = vision::Settings::default();
+    let mut settings = vision::Settings::default();
+    settings.proc.is_dump_steps = false;
     let board = vision::parse_board_from(photo, &settings)?;
     match board {
         Some(brd) => println!("{brd}"),

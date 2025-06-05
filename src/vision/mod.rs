@@ -1,6 +1,7 @@
 mod proc;
 use chrono::Local;
 
+use std::string::String;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread::JoinHandle;
 
@@ -12,11 +13,13 @@ use opencv::imgcodecs;
 use opencv::prelude::*;
 use opencv::videoio::{self, VideoCapture};
 
+use proc::TimeMeasure;
+
 static DEFAULT_CAMERA_CALIBRATION_PATH: &str = "./etc/camera_calibration.json";
 
 #[derive(Clone)]
 pub struct Settings {
-    proc: proc::Settings,
+    pub proc: proc::Settings,
     single_stone_stable_board_time_ms: u32,
     many_stones_stable_board_time_ms: u32,
 }
@@ -113,7 +116,6 @@ impl Vision {
         let mut sended_board = Board::default();
         let mut last_board = Board::default();
         let mut last_board_time = std::time::SystemTime::now();
-        let mut last_board_updated = false;
         let mut is_only_one_stone_added_from_last_update = true;
 
         loop {
@@ -139,8 +141,8 @@ impl Vision {
 
                             last_board = brd;
                             last_board_time = std::time::SystemTime::now();
-                            last_board_updated = true;
                             is_only_one_stone_added_from_last_update &= is_only_one_stone_added;
+                            println!("is only one: {is_only_one_stone_added}");
                         }
                     }
                 }
@@ -149,21 +151,18 @@ impl Vision {
                     break;
                 }
             }
-            if last_board_updated {
-                if let Ok(dur) = last_board_time.elapsed() {
-                    let is_one_stone_time = is_only_one_stone_added_from_last_update
-                        && dur.as_millis() > settings.single_stone_stable_board_time_ms as u128;
-                    let is_many_stones_time = !is_only_one_stone_added_from_last_update
-                        && dur.as_millis() > settings.many_stones_stable_board_time_ms as u128;
-                    let is_time_to_send = is_one_stone_time || is_many_stones_time;
+            if let Ok(dur) = last_board_time.elapsed() {
+                let is_one_stone_time = is_only_one_stone_added_from_last_update
+                    && dur.as_millis() > settings.single_stone_stable_board_time_ms as u128;
+                let is_many_stones_time = !is_only_one_stone_added_from_last_update
+                    && dur.as_millis() > settings.many_stones_stable_board_time_ms as u128;
+                let is_time_to_send = is_one_stone_time || is_many_stones_time;
 
-                    if is_time_to_send && has_diff(&sended_board, &last_board) {
-                        sended_board = last_board.clone();
-                        last_board_updated = false;
-                        is_only_one_stone_added_from_last_update = true;
-                        if let Err(_) = tx.send(VisionMsg::Board(Box::new(sended_board.clone()))) {
-                            break;
-                        }
+                if is_time_to_send && has_diff(&sended_board, &last_board) {
+                    sended_board = last_board.clone();
+                    is_only_one_stone_added_from_last_update = true;
+                    if let Err(_) = tx.send(VisionMsg::Board(Box::new(sended_board.clone()))) {
+                        break;
                     }
                 }
             }
@@ -258,16 +257,32 @@ pub fn camera_mode() -> Result<()> {
 }
 
 pub fn parse_board_from(photo_filename: &str, settings: &Settings) -> Result<Option<Board>> {
+    let imgread_time = TimeMeasure::new("imgread");
     let img = imgcodecs::imread(photo_filename, imgcodecs::IMREAD_COLOR)?;
+    let img = proc::convert_to_grayscale(&img)?;
+    drop(imgread_time);
+
+    let full_time = TimeMeasure::new("proc full time");
+
+    let find_border_time = TimeMeasure::new("find_border");
     let border = proc::find_board_border(&settings.proc, &img)?;
+    drop(find_border_time);
+
     let board = match border {
         Some(border) => {
+            let warped_time = TimeMeasure::new("warp");
             let warped = proc::warp_board_by_border(&settings.proc, &border, &img)?;
+            drop(warped_time);
+
+            let find_stones_time = TimeMeasure::new("find_stones");
             let board = proc::find_stones(&settings.proc, &warped, 19)?;
+            drop(find_stones_time);
+
             Some(board)
         }
         None => None,
     };
+    drop(full_time);
     Ok(board)
 }
 
