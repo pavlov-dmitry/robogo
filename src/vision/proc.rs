@@ -18,13 +18,12 @@ pub struct Settings {
     min_board_border_perimeter: f64,
     board_width: i32,
     board_height: i32,
-    stones_left_shift: f64,
-    stones_right_shift: f64,
-    stones_top_shift: f64,
-    stones_bottom_shift: f64,
-    stone_radius: i32,
-    white_stone_threshold: u8,
-    black_stone_threshold: u8,
+    expected_stone_radius: i32,
+    stones_left_shift: f32,
+    stones_right_shift: f32,
+    stones_top_shift: f32,
+    stones_bottom_shift: f32,
+    read_square_size: i32,
     pub is_dump_steps: bool,
     pub dump_dir: String,
 }
@@ -35,13 +34,12 @@ impl Settings {
             min_board_border_perimeter: 3200.,
             board_width: 1000,
             board_height: 1000,
+            expected_stone_radius: 25,
             stones_left_shift: 17.,
             stones_right_shift: 16.,
             stones_top_shift: 5.,
             stones_bottom_shift: 17.,
-            stone_radius: 12,
-            white_stone_threshold: 190,
-            black_stone_threshold: 60,
+            read_square_size: 12,
             is_dump_steps: true,
             dump_dir: String::from("./vision_dump/"),
         }
@@ -229,7 +227,150 @@ fn square_mean(gray: &Mat, center: Point2i, radius: i32) -> u8 {
     return (summ / count) as u8;
 }
 
-pub fn find_stones(settings: &Settings, img: &Mat, board_size: usize) -> Result<Board> {
+pub fn find_stones(
+    settings: &Settings,
+    img: &Mat,
+    board_size: usize,
+) -> Result<Vec<(usize, usize)>> {
+    let mut blurred = Mat::default();
+    imgproc::gaussian_blur_def(&img, &mut blurred, core::Size::new(5, 5), 5.)?;
+    //определяем края
+    let mut binary = Mat::default();
+    imgproc::canny(&blurred, &mut binary, 50., 150., 3, true)?;
+    if settings.is_dump_steps {
+        opencv::imgcodecs::imwrite(
+            &(settings.dump_dir.clone() + "binary_stones.jpg"),
+            &binary,
+            &core::Vector::default(),
+        )?;
+    }
+
+    //находим прямые линии по вертикали и горизонтали
+    let mut lines = Vector::<core::Vec4i>::new();
+    let mut line_detector = imgproc::create_line_segment_detector_def()?;
+    line_detector.detect_def(&binary, &mut lines)?;
+
+    //    imgproc::hough_lines_p(
+    //        &binary,
+    //        &mut lines,
+    //        1.,
+    //        core::CV_PI / 180.,
+    //        10,
+    //        settings.expected_stone_radius as f64 * 1.0,
+    //        settings.expected_stone_radius as f64 * 0.3,
+    //    )?;
+
+    let mut img_lines = Mat::default();
+    if settings.is_dump_steps {
+        imgproc::cvt_color(&binary, &mut img_lines, imgproc::COLOR_GRAY2BGR, 0)?;
+    }
+
+    let min_line_len = (settings.expected_stone_radius as f32 * 0.8) as i32;
+    for line in lines {
+        let p1 = Point2i::new(line[0], line[1]);
+        let p2 = Point2i::new(line[2], line[3]);
+        let x_diff = (p1.x - p2.x).abs();
+        let y_diff = (p1.y - p2.y).abs();
+        let line_len = x_diff.max(y_diff);
+        if line_len < min_line_len {
+            continue;
+        }
+        // выбираем из всез линий только горизонтальные и вертикальные
+        let maximum_shift = (settings.expected_stone_radius as f64 * 0.2) as i32;
+        if x_diff < maximum_shift || y_diff < maximum_shift {
+            if settings.is_dump_steps {
+                imgproc::line(
+                    &mut img_lines,
+                    p1,
+                    p2,
+                    Scalar::new(0.0, 255.0, 0.0, 0.0), // Зелёный цвет
+                    2,
+                    imgproc::LINE_4,
+                    0,
+                )?;
+            }
+            // вычитаем эти линии из нашей картинки
+            imgproc::line(
+                &mut binary,
+                p1,
+                p2,
+                Scalar::new(0.0, 0.0, 0.0, 0.0),
+                2,
+                imgproc::LINE_4,
+                0,
+            )?;
+        }
+    }
+    if settings.is_dump_steps {
+        opencv::imgcodecs::imwrite(
+            &(settings.dump_dir.clone() + "img_lines.jpg"),
+            &img_lines,
+            &core::Vector::default(),
+        )?;
+        opencv::imgcodecs::imwrite(
+            &(settings.dump_dir.clone() + "before_circles.jpg"),
+            &binary,
+            &core::Vector::default(),
+        )?;
+    }
+
+    // теперь пытаемся расслаблено найти кружки здесь
+    let mut circles = Vector::<Point3f>::new();
+    imgproc::hough_circles(
+        &binary,
+        &mut circles,
+        imgproc::HOUGH_GRADIENT,
+        1.5,
+        settings.expected_stone_radius as f64 * 1.6,
+        50.,
+        30.,
+        (settings.expected_stone_radius as f64 * 0.8) as i32,
+        (settings.expected_stone_radius as f64 * 1.2) as i32,
+    )?;
+
+    let mut img_circles = Mat::default();
+    if settings.is_dump_steps {
+        imgproc::cvt_color(&img, &mut img_circles, imgproc::COLOR_GRAY2BGR, 0)?;
+    }
+    let mut result = Vec::<(usize, usize)>::new();
+    let x_step =
+        (settings.board_width as f32 - settings.stones_left_shift - settings.stones_right_shift)
+            / board_size as f32;
+    let y_step =
+        (settings.board_height as f32 - settings.stones_top_shift - settings.stones_bottom_shift)
+            / board_size as f32;
+    for circle in circles {
+        let x = (circle.x.max(settings.stones_left_shift) - settings.stones_left_shift) / x_step;
+        let y = (circle.y.max(settings.stones_top_shift) - settings.stones_top_shift) / y_step;
+        result.push((x as usize, y as usize));
+        if settings.is_dump_steps {
+            imgproc::circle(
+                &mut img_circles,
+                Point::new(circle.x as i32, circle.y as i32),
+                circle.z as i32,
+                Scalar::new(0.0, 255.0, 0.0, 0.0), // Зелёный цвет
+                2,
+                imgproc::LINE_AA,
+                0,
+            )?;
+        }
+    }
+    if settings.is_dump_steps {
+        opencv::imgcodecs::imwrite(
+            &(settings.dump_dir.clone() + "img_circles.jpg"),
+            &img_circles,
+            &core::Vector::default(),
+        )?;
+    }
+    Ok(result)
+}
+
+pub fn read_stones(
+    settings: &Settings,
+    img: &Mat,
+    stones: Vec<(usize, usize)>,
+    board_size: usize,
+) -> Result<Board> {
     let mut board = Board::new_with_size(board_size);
 
     let mut debug_img: Option<Mat> = if settings.is_dump_steps {
@@ -242,51 +383,47 @@ pub fn find_stones(settings: &Settings, img: &Mat, board_size: usize) -> Result<
     let horz_size = img.cols() - horz_shift as i32;
     let vert_shift = settings.stones_top_shift + settings.stones_bottom_shift;
     let vert_size = img.rows() - vert_shift as i32;
-    let horz_step = horz_size as f64 / board_size as f64;
-    let vert_step = vert_size as f64 / board_size as f64;
+    let horz_step = horz_size as f32 / board_size as f32;
+    let vert_step = vert_size as f32 / board_size as f32;
 
-    for x in 0..board_size {
-        for y in 0..board_size {
-            let radius = settings.stone_radius;
-            let center_x = x as f64 * horz_step + horz_step / 2. + settings.stones_left_shift;
-            let center_y = y as f64 * vert_step + vert_step / 2. + settings.stones_top_shift;
-            let center = core::Point::new(center_x as i32, center_y as i32);
-            let value = square_mean(&img, center, radius);
+    for (x, y) in stones {
+        let radius = settings.read_square_size;
+        let center_x = x as f32 * horz_step + horz_step / 2. + settings.stones_left_shift;
+        let center_y = y as f32 * vert_step + vert_step / 2. + settings.stones_top_shift;
+        let center = core::Point::new(center_x as i32, center_y as i32);
+        let value = square_mean(&img, center, radius);
 
-            let pos_y = board_size - y - 1;
-            if value < settings.black_stone_threshold {
-                board.set(Pos::new(x, pos_y), Cell::black_stone());
-            } else if value > settings.white_stone_threshold {
-                board.set(Pos::new(x, pos_y), Cell::white_stone());
-            } else {
-                board.set(Pos::new(x, pos_y), Cell::empty());
-            }
-
-            if let Some(image) = &mut debug_img {
-                let rect =
-                    core::Rect::new(center.x - radius, center.y - radius, radius * 2, radius * 2);
-                //рисуем прямоуголники в которых считали
-                imgproc::rectangle(
-                    image,
-                    rect,
-                    core::Scalar::new(0.0, 0.0, 255.0, 0.0),
-                    1,
-                    imgproc::LINE_8,
-                    0,
-                )?;
-                // Подписываем значение
-                imgproc::put_text(
-                    image,
-                    &format!("{value}"),
-                    core::Point::new(center.x - 20, center.y),
-                    imgproc::FONT_HERSHEY_SIMPLEX,
-                    0.4,
-                    core::Scalar::new(255.0, 0.0, 255.0, 0.0),
-                    1,
-                    imgproc::LINE_AA,
-                    false,
-                )?;
-            }
+        let pos_y = board_size - y - 1;
+        let threshold = u8::MAX / 2;
+        if value < threshold {
+            board.set(Pos::new(x, pos_y), Cell::black_stone());
+        } else {
+            board.set(Pos::new(x, pos_y), Cell::white_stone());
+        }
+        if let Some(image) = &mut debug_img {
+            let rect =
+                core::Rect::new(center.x - radius, center.y - radius, radius * 2, radius * 2);
+            //рисуем прямоуголники в которых считали
+            imgproc::rectangle(
+                image,
+                rect,
+                core::Scalar::new(0.0, 0.0, 255.0, 0.0),
+                1,
+                imgproc::LINE_8,
+                0,
+            )?;
+            // Подписываем значение
+            imgproc::put_text(
+                image,
+                &format!("{value}"),
+                core::Point::new(center.x - 20, center.y),
+                imgproc::FONT_HERSHEY_SIMPLEX,
+                0.4,
+                core::Scalar::new(255.0, 0.0, 255.0, 0.0),
+                1,
+                imgproc::LINE_AA,
+                false,
+            )?;
         }
     }
     if let Some(image) = &debug_img {

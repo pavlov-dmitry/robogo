@@ -101,7 +101,8 @@ impl Vision {
 
         if let Some(border) = proc::find_board_border(&settings.proc, &frame)? {
             let warped_img = proc::warp_board_by_border(&settings.proc, &border, &frame)?;
-            let board = proc::find_stones(&settings.proc, &warped_img, 19)?;
+            let stones = proc::find_stones(&settings.proc, &warped_img, 19)?;
+            let board = proc::read_stones(&settings.proc, &warped_img, stones, 19)?;
             return Ok(Some(board));
         }
 
@@ -273,7 +274,10 @@ pub fn parse_board_from(photo_filename: &str, settings: &Settings) -> Result<Opt
             let warped = proc::warp_board_by_border(&settings.proc, &border, &img)?;
             time_measure.print_elapsed_ms_and_tick("warp board");
 
-            let board = proc::find_stones(&settings.proc, &warped, 19)?;
+            let stones = proc::find_stones(&settings.proc, &warped, 19)?;
+            time_measure.print_elapsed_ms_and_tick("find circles");
+
+            let board = proc::read_stones(&settings.proc, &warped, stones, 19)?;
             time_measure.print_elapsed_ms_and_tick("find stones");
 
             Some(board)

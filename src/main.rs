@@ -115,7 +115,7 @@ fn vision() -> Result<()> {
 
 fn parse_board(photo: &str) -> Result<()> {
     let mut settings = vision::Settings::default();
-    settings.proc.is_dump_steps = false;
+    settings.proc.is_dump_steps = true;
     let board = vision::parse_board_from(photo, &settings)?;
     match board {
         Some(brd) => println!("{brd}"),
@@ -126,7 +126,7 @@ fn parse_board(photo: &str) -> Result<()> {
 
 fn vision_tests(tests_dir: &str) -> Result<()> {
     let mut success_count = 0;
-    let mut failed_count = 0;
+    let mut failed_tests = Vec::new();
 
     for entry in std::fs::read_dir(tests_dir)? {
         let entry = entry?;
@@ -135,8 +135,8 @@ fn vision_tests(tests_dir: &str) -> Result<()> {
         // проходимся только директориям
         if entry_type.is_dir() {
             // имя теста это имя директории
-            let name = entry.file_name();
-            println!("Test {}", name.display());
+            let name = format!("{}", entry.file_name().display());
+            println!("Test {}", name);
 
             let settings = vision::Settings::default();
             let photo_filename = format!("{}/photo.jpg", entry.path().as_os_str().display());
@@ -151,7 +151,14 @@ fn vision_tests(tests_dir: &str) -> Result<()> {
                         let board_txt = std::fs::read_to_string(board_filename)?;
                         let board = board::Board::from_str(&board_txt)?;
                         println!("SOURCE BOARD:\n{}", board);
-                        vision_board == board
+                        let diff = board::diff(&board, &vision_board);
+                        if !diff.is_empty() {
+                            println!("DIFF: ");
+                            for d in &diff {
+                                println!("  {d}");
+                            }
+                        }
+                        diff.is_empty()
                     } else {
                         println!("SOURCE BOARD DO NOT EXISTS");
                         false
@@ -167,15 +174,24 @@ fn vision_tests(tests_dir: &str) -> Result<()> {
             // подсчитывам количество пройденных и не пройденных тестов
             if test_success {
                 success_count += 1;
-                println!("Test {} success.", name.display());
+                println!("Test {} success.", name);
             } else {
-                failed_count += 1;
-                println!("Test {} FAILED!", name.display());
+                println!("Test {} FAILED!", name);
+                failed_tests.push(name);
             }
             println!("---------------------------------------------\n");
         }
     }
-    println!("All tests finished. {success_count} success, {failed_count} failed.");
+    println!(
+        "All tests finished. {success_count} success, {} failed.",
+        failed_tests.len()
+    );
+    if !failed_tests.is_empty() {
+        println!("failed tests list:");
+        for name in failed_tests {
+            println!("  {name}");
+        }
+    }
     Ok(())
 }
 
