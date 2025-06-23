@@ -114,9 +114,8 @@ fn vision() -> Result<()> {
 }
 
 fn parse_board(photo: &str) -> Result<()> {
-    let mut settings = vision::Settings::default();
-    settings.proc.is_dump_steps = true;
-    let board = vision::parse_board_from(photo, &settings)?;
+    let settings = vision::Settings::default();
+    let board = vision::parse_board_from(photo, &settings, true)?;
     match board {
         Some(brd) => println!("{brd}"),
         None => println!("Доска не найдена."),
@@ -140,7 +139,7 @@ fn vision_tests(tests_dir: &str) -> Result<()> {
 
             let settings = vision::Settings::default();
             let photo_filename = format!("{}/photo.jpg", entry.path().as_os_str().display());
-            let board_from_vision = vision::parse_board_from(&photo_filename, &settings)?;
+            let board_from_vision = vision::parse_board_from(&photo_filename, &settings, false)?;
             let board_filename = format!("{}/board.txt", entry.path().as_os_str().display());
             let is_board_file_exists = std::fs::exists(&board_filename)?;
 

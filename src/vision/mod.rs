@@ -7,7 +7,7 @@ use std::thread::JoinHandle;
 
 use super::board::{self, Board, Cell, Pos, has_diff};
 
-use opencv::core::Mat;
+use opencv::core::{Mat, Vector};
 use opencv::highgui;
 use opencv::imgcodecs;
 use opencv::prelude::*;
@@ -20,6 +20,7 @@ static DEFAULT_CAMERA_CALIBRATION_PATH: &str = "./etc/camera_calibration.json";
 #[derive(Clone)]
 pub struct Settings {
     pub proc: proc::Settings,
+    save_more_than_one_stone_diffs: bool,
     single_stone_stable_board_time_ms: u32,
     many_stones_stable_board_time_ms: u32,
 }
@@ -28,6 +29,7 @@ impl Settings {
     pub fn default() -> Self {
         Settings {
             proc: proc::Settings::default(),
+            save_more_than_one_stone_diffs: true,
             single_stone_stable_board_time_ms: 500,
             many_stones_stable_board_time_ms: 1500,
         }
@@ -91,7 +93,11 @@ impl Vision {
         })
     }
 
-    fn read_board(camera: &mut VideoCapture, settings: &Settings) -> opencv::Result<Option<Board>> {
+    fn read_board(
+        camera: &mut VideoCapture,
+        settings: &Settings,
+        is_dump_steps: bool,
+    ) -> opencv::Result<Option<(Board, Mat)>> {
         let mut frame = Mat::default();
         camera.read(&mut frame)?;
         let frame = proc::convert_to_grayscale(&frame)?;
@@ -99,11 +105,11 @@ impl Vision {
             return Ok(None);
         }
 
-        if let Some(border) = proc::find_board_border(&settings.proc, &frame)? {
+        if let Some(border) = proc::find_board_border(&settings.proc, &frame, is_dump_steps)? {
             let warped_img = proc::warp_board_by_border(&settings.proc, &border, &frame)?;
-            let stones = proc::find_stones(&settings.proc, &warped_img, 19)?;
-            let board = proc::read_stones(&settings.proc, &warped_img, stones, 19)?;
-            return Ok(Some(board));
+            let stones = proc::find_stones(&settings.proc, &warped_img, 19, is_dump_steps)?;
+            let board = proc::read_stones(&settings.proc, &warped_img, stones, 19, is_dump_steps)?;
+            return Ok(Some((board, frame)));
         }
 
         Ok(None)
@@ -124,9 +130,9 @@ impl Vision {
             if quit_rx.try_recv().is_ok() {
                 break;
             }
-            match Vision::read_board(&mut camera, &settings) {
+            match Vision::read_board(&mut camera, &settings, false) {
                 Ok(maybe_board) => {
-                    if let Some(brd) = maybe_board {
+                    if let Some((brd, frame)) = maybe_board {
                         let diff = board::diff(&last_board, &brd);
                         let is_only_one_stone_added = diff.len() == 1
                             && match diff[0] {
@@ -136,9 +142,16 @@ impl Vision {
 
                         if !diff.is_empty() {
                             // специальный режим если изменений больше одного камня отбросить фотографии в отдеьлную папку
-                            if settings.proc.is_dump_steps && !is_only_one_stone_added {
-                                let dst = format!("./vision_errors/{}/", timestamp());
-                                let _ = copy_dir_all(&settings.proc.dump_dir, dst);
+                            if settings.save_more_than_one_stone_diffs && !is_only_one_stone_added {
+                                let filename = format!(
+                                    "./more_than_one_stone_diffs/photo_{}.jpg/",
+                                    timestamp()
+                                );
+                                let _ = opencv::imgcodecs::imwrite(
+                                    &filename,
+                                    &frame,
+                                    &Vector::default(),
+                                );
                             }
 
                             last_board = brd;
@@ -258,7 +271,11 @@ pub fn camera_mode() -> Result<()> {
     Ok(())
 }
 
-pub fn parse_board_from(photo_filename: &str, settings: &Settings) -> Result<Option<Board>> {
+pub fn parse_board_from(
+    photo_filename: &str,
+    settings: &Settings,
+    is_dump_steps: bool,
+) -> Result<Option<Board>> {
     let mut time_measure = TimeMeasure::tick();
     let img = imgcodecs::imread(photo_filename, imgcodecs::IMREAD_COLOR)?;
     let img = proc::convert_to_grayscale(&img)?;
@@ -266,7 +283,7 @@ pub fn parse_board_from(photo_filename: &str, settings: &Settings) -> Result<Opt
 
     let mut full_proc_time_measure = TimeMeasure::tick();
 
-    let border = proc::find_board_border(&settings.proc, &img)?;
+    let border = proc::find_board_border(&settings.proc, &img, is_dump_steps)?;
     time_measure.print_elapsed_ms_and_tick("find board border");
 
     let board = match border {
@@ -274,10 +291,10 @@ pub fn parse_board_from(photo_filename: &str, settings: &Settings) -> Result<Opt
             let warped = proc::warp_board_by_border(&settings.proc, &border, &img)?;
             time_measure.print_elapsed_ms_and_tick("warp board");
 
-            let stones = proc::find_stones(&settings.proc, &warped, 19)?;
+            let stones = proc::find_stones(&settings.proc, &warped, 19, is_dump_steps)?;
             time_measure.print_elapsed_ms_and_tick("find circles");
 
-            let board = proc::read_stones(&settings.proc, &warped, stones, 19)?;
+            let board = proc::read_stones(&settings.proc, &warped, stones, 19, is_dump_steps)?;
             time_measure.print_elapsed_ms_and_tick("find stones");
 
             Some(board)
@@ -301,27 +318,6 @@ pub fn test_calibration(filename: &str) -> Result<()> {
     highgui::named_window("Calibrated", highgui::WINDOW_NORMAL)?;
     highgui::imshow("Calibrated", &undistorted)?;
     highgui::wait_key(0)?;
-
-    Ok(())
-}
-
-fn copy_dir_all(
-    src: impl AsRef<std::path::Path>,
-    dst: impl AsRef<std::path::Path>,
-) -> std::io::Result<()> {
-    std::fs::create_dir_all(&dst)?;
-
-    for entry in std::fs::read_dir(src)? {
-        let entry = entry?;
-
-        let ty = entry.file_type()?;
-
-        if ty.is_dir() {
-            copy_dir_all(entry.path(), dst.as_ref().join(entry.file_name()))?;
-        } else {
-            std::fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
-        }
-    }
 
     Ok(())
 }

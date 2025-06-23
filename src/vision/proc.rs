@@ -9,6 +9,7 @@ use super::{Board, Cell, Pos};
 
 static CAMERA_MATRIX: &str = "camera_matrix";
 static DISTORTION_COEFFICIENTS: &str = "distortion_coefficients";
+static VISION_DUMP_DIR: &str = "./vision_dump/";
 
 type Polygon = Vector<Point>;
 pub type Error = opencv::Error;
@@ -24,8 +25,6 @@ pub struct Settings {
     stones_top_shift: f32,
     stones_bottom_shift: f32,
     read_square_size: i32,
-    pub is_dump_steps: bool,
-    pub dump_dir: String,
 }
 
 impl Settings {
@@ -40,8 +39,6 @@ impl Settings {
             stones_top_shift: 5.,
             stones_bottom_shift: 17.,
             read_square_size: 12,
-            is_dump_steps: true,
-            dump_dir: String::from("./vision_dump/"),
         }
     }
 }
@@ -54,7 +51,11 @@ pub fn convert_to_grayscale(img: &Mat) -> Result<Mat> {
 }
 
 // Если и возвращает то это полигон с 4мя точками
-pub fn find_board_border(settings: &Settings, img: &Mat) -> Result<Option<Polygon>> {
+pub fn find_board_border(
+    settings: &Settings,
+    img: &Mat,
+    is_dump_steps: bool,
+) -> Result<Option<Polygon>> {
     // бинаризация по порогу
     let mut binary = Mat::default();
     imgproc::adaptive_threshold(
@@ -66,9 +67,9 @@ pub fn find_board_border(settings: &Settings, img: &Mat) -> Result<Option<Polygo
         31,
         7.,
     )?;
-    if settings.is_dump_steps {
+    if is_dump_steps {
         opencv::imgcodecs::imwrite(
-            &(settings.dump_dir.clone() + "binary.jpg"),
+            &(String::from(VISION_DUMP_DIR) + "binary.jpg"),
             &binary,
             &core::Vector::default(),
         )?;
@@ -112,7 +113,7 @@ pub fn find_board_border(settings: &Settings, img: &Mat) -> Result<Option<Polygo
         }
     }
 
-    if settings.is_dump_steps {
+    if is_dump_steps {
         let mut img_with_border = Mat::default();
         imgproc::cvt_color(&img, &mut img_with_border, imgproc::COLOR_GRAY2BGR, 0)?;
         if let Some(poly) = &best_polygon {
@@ -132,12 +133,12 @@ pub fn find_board_border(settings: &Settings, img: &Mat) -> Result<Option<Polygo
             )?;
         }
         opencv::imgcodecs::imwrite(
-            &(settings.dump_dir.clone() + "border.jpg"),
+            &(String::from(VISION_DUMP_DIR) + "border.jpg"),
             &img_with_border,
             &core::Vector::default(),
         )?;
         opencv::imgcodecs::imwrite(
-            &(settings.dump_dir.clone() + "origin.jpg"),
+            &(String::from(VISION_DUMP_DIR) + "origin.jpg"),
             &img,
             &core::Vector::default(),
         )?;
@@ -231,15 +232,16 @@ pub fn find_stones(
     settings: &Settings,
     img: &Mat,
     board_size: usize,
+    is_dump_steps: bool,
 ) -> Result<Vec<(usize, usize)>> {
     let mut blurred = Mat::default();
     imgproc::gaussian_blur_def(&img, &mut blurred, core::Size::new(5, 5), 5.)?;
     //определяем края
     let mut binary = Mat::default();
     imgproc::canny(&blurred, &mut binary, 50., 150., 3, true)?;
-    if settings.is_dump_steps {
+    if is_dump_steps {
         opencv::imgcodecs::imwrite(
-            &(settings.dump_dir.clone() + "binary_stones.jpg"),
+            &(String::from(VISION_DUMP_DIR) + "binary_stones.jpg"),
             &binary,
             &core::Vector::default(),
         )?;
@@ -261,7 +263,7 @@ pub fn find_stones(
     //    )?;
 
     let mut img_lines = Mat::default();
-    if settings.is_dump_steps {
+    if is_dump_steps {
         imgproc::cvt_color(&binary, &mut img_lines, imgproc::COLOR_GRAY2BGR, 0)?;
     }
 
@@ -278,7 +280,7 @@ pub fn find_stones(
         // выбираем из всез линий только горизонтальные и вертикальные
         let maximum_shift = (settings.expected_stone_radius as f64 * 0.2) as i32;
         if x_diff < maximum_shift || y_diff < maximum_shift {
-            if settings.is_dump_steps {
+            if is_dump_steps {
                 imgproc::line(
                     &mut img_lines,
                     p1,
@@ -301,14 +303,14 @@ pub fn find_stones(
             )?;
         }
     }
-    if settings.is_dump_steps {
+    if is_dump_steps {
         opencv::imgcodecs::imwrite(
-            &(settings.dump_dir.clone() + "img_lines.jpg"),
+            &(String::from(VISION_DUMP_DIR) + "img_lines.jpg"),
             &img_lines,
             &core::Vector::default(),
         )?;
         opencv::imgcodecs::imwrite(
-            &(settings.dump_dir.clone() + "before_circles.jpg"),
+            &(String::from(VISION_DUMP_DIR) + "before_circles.jpg"),
             &binary,
             &core::Vector::default(),
         )?;
@@ -329,7 +331,7 @@ pub fn find_stones(
     )?;
 
     let mut img_circles = Mat::default();
-    if settings.is_dump_steps {
+    if is_dump_steps {
         imgproc::cvt_color(&img, &mut img_circles, imgproc::COLOR_GRAY2BGR, 0)?;
     }
     let mut result = Vec::<(usize, usize)>::new();
@@ -343,7 +345,7 @@ pub fn find_stones(
         let x = (circle.x.max(settings.stones_left_shift) - settings.stones_left_shift) / x_step;
         let y = (circle.y.max(settings.stones_top_shift) - settings.stones_top_shift) / y_step;
         result.push((x as usize, y as usize));
-        if settings.is_dump_steps {
+        if is_dump_steps {
             imgproc::circle(
                 &mut img_circles,
                 Point::new(circle.x as i32, circle.y as i32),
@@ -355,9 +357,9 @@ pub fn find_stones(
             )?;
         }
     }
-    if settings.is_dump_steps {
+    if is_dump_steps {
         opencv::imgcodecs::imwrite(
-            &(settings.dump_dir.clone() + "img_circles.jpg"),
+            &(String::from(VISION_DUMP_DIR) + "img_circles.jpg"),
             &img_circles,
             &core::Vector::default(),
         )?;
@@ -370,10 +372,11 @@ pub fn read_stones(
     img: &Mat,
     stones: Vec<(usize, usize)>,
     board_size: usize,
+    is_dump_steps: bool,
 ) -> Result<Board> {
     let mut board = Board::new_with_size(board_size);
 
-    let mut debug_img: Option<Mat> = if settings.is_dump_steps {
+    let mut debug_img: Option<Mat> = if is_dump_steps {
         Some(img.clone())
     } else {
         None
@@ -428,7 +431,7 @@ pub fn read_stones(
     }
     if let Some(image) = &debug_img {
         opencv::imgcodecs::imwrite(
-            &(settings.dump_dir.clone() + "stones.jpg"),
+            &(String::from(VISION_DUMP_DIR) + "stones.jpg"),
             &image,
             &core::Vector::default(),
         )?;
