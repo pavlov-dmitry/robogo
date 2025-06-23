@@ -487,8 +487,8 @@ pub fn find_stones(
         imgproc::HOUGH_GRADIENT,
         1.5,
         settings.expected_stone_radius as f64 * 1.6,
-        30.,
-        30.,
+        50.,
+        28.,
         (settings.expected_stone_radius as f64 * 0.8) as i32,
         (settings.expected_stone_radius as f64 * 1.2) as i32,
     )?;
