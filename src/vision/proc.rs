@@ -96,7 +96,7 @@ pub fn find_board_border(
     // ищем самый большой четырёхуголник
     let mut best_perimeter = std::f64::MIN;
     let mut best_polygon: Option<Polygon> = Option::None;
-    for contour in contours {
+    for contour in &contours {
         let perimeter = imgproc::arc_length(&contour, true)?;
         // сразу отсекаем полигоны раные всей картинке
         if perimeter as i32 == (img.cols() * 2 + img.rows() * 2) {
@@ -112,7 +112,6 @@ pub fn find_board_border(
             if has_zero_zero_pnt {
                 continue;
             }
-            let perimeter = imgproc::arc_length(&polygon, false)?;
             // с самым большим периметром
             if perimeter > settings.min_board_border_perimeter && perimeter > best_perimeter {
                 best_perimeter = perimeter;
@@ -122,6 +121,26 @@ pub fn find_board_border(
     }
 
     if is_dump_steps {
+        let mut all = Mat::default();
+        imgproc::cvt_color(&img, &mut all, imgproc::COLOR_GRAY2BGR, 0)?;
+
+        imgproc::draw_contours(
+            &mut all,
+            &contours,
+            -1,                                // Индекс контура (-1 = все контуры)
+            Scalar::new(0.0, 255.0, 0.0, 0.0), // Зелёный цвет
+            2,                                 // Толщина линии
+            imgproc::LINE_8,
+            &Mat::default(),
+            std::i32::MAX,
+            Point::default(),
+        )?;
+        opencv::imgcodecs::imwrite(
+            &(String::from(VISION_DUMP_DIR) + "all_contours.jpg"),
+            &all,
+            &core::Vector::default(),
+        )?;
+
         let mut img_with_border = Mat::default();
         imgproc::cvt_color(&img, &mut img_with_border, imgproc::COLOR_GRAY2BGR, 0)?;
         if let Some(poly) = &best_polygon {
@@ -193,6 +212,7 @@ pub fn warp_board_by_border(settings: &Settings, border: &Polygon, img: &Mat) ->
         core::BORDER_CONSTANT,
         Scalar::default(),
     )?;
+
     Ok(warped)
 }
 
@@ -335,7 +355,7 @@ pub fn find_stones(
     imgproc::gaussian_blur_def(&img, &mut blurred, core::Size::new(5, 5), 5.)?;
     //определяем края
     let mut binary = Mat::default();
-    imgproc::canny(&blurred, &mut binary, 50., 150., 3, true)?;
+    imgproc::canny(&blurred, &mut binary, 30., 80., 3, true)?;
     if is_dump_steps {
         opencv::imgcodecs::imwrite(
             &(String::from(VISION_DUMP_DIR) + "binary_stones.jpg"),
@@ -434,6 +454,31 @@ pub fn find_stones(
         )?;
     }
 
+    //попытка восстноваить круги и элипсы перед их распознованием
+    //    let kernel = imgproc::get_structuring_element(
+    //        imgproc::MORPH_ELLIPSE,
+    //        Size::new(3, 3),
+    //        Point::default(),
+    //    )?;
+    //    let mut morphology = Mat::default();
+    //    imgproc::morphology_ex(
+    //        &binary,
+    //        &mut morphology,
+    //        imgproc::MORPH_CLOSE,
+    //        &kernel,
+    //        Point::default(),
+    //        1,
+    //        core::BORDER_CONSTANT,
+    //        Scalar::default(),
+    //    )?;
+    //    if is_dump_steps {
+    //        opencv::imgcodecs::imwrite(
+    //            &(String::from(VISION_DUMP_DIR) + "after_morphology.jpg"),
+    //            &morphology,
+    //            &core::Vector::default(),
+    //        )?;
+    //    }
+
     // теперь пытаемся расслаблено найти кружки здесь
     let mut circles = Vector::<Point3f>::new();
     imgproc::hough_circles(
@@ -442,7 +487,7 @@ pub fn find_stones(
         imgproc::HOUGH_GRADIENT,
         1.5,
         settings.expected_stone_radius as f64 * 1.6,
-        50.,
+        30.,
         30.,
         (settings.expected_stone_radius as f64 * 0.8) as i32,
         (settings.expected_stone_radius as f64 * 1.2) as i32,
