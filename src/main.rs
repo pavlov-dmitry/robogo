@@ -22,8 +22,11 @@ enum Commands {
     /// Режим тестирования компьютерного зрения. Распознаёт позицию на доске.
     Vision,
 
-    /// Режим распознования доски по фотографии
-    ParseBoard { photo_filename: String },
+    /// Режим распознования доски по фотографии (по умолчанию сохраняет файлы промежуточных шагов)
+    ParseBoard {
+        photo_filename: String,
+        dump_files: Option<bool>,
+    },
 
     /// Режим калибровки камеры по фото (нужен путь на папку с файлми 1.jpg, 2.jpg и т.д. и их количество)
     Calibrate { photo_dir: String, count: u32 },
@@ -113,9 +116,10 @@ fn vision() -> Result<()> {
     }
 }
 
-fn parse_board(photo: &str) -> Result<()> {
+fn parse_board(photo: &str, dump_files: Option<bool>) -> Result<()> {
+    let is_dump_steps = dump_files.is_none_or(|v| v);
     let settings = vision::Settings::default();
-    let board = vision::parse_board_from(photo, &settings, true)?;
+    let board = vision::parse_board_from(photo, &settings, is_dump_steps)?;
     match board {
         Some(brd) => println!("{brd}"),
         None => println!("Доска не найдена."),
@@ -205,7 +209,10 @@ fn main() -> Result<()> {
 
             Commands::Vision => vision(),
 
-            Commands::ParseBoard { photo_filename } => parse_board(&photo_filename),
+            Commands::ParseBoard {
+                photo_filename,
+                dump_files,
+            } => parse_board(&photo_filename, dump_files),
 
             Commands::Calibrate { photo_dir, count } => {
                 vision::calibrate_by(&photo_dir, count)?;

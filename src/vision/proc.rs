@@ -1,6 +1,6 @@
 use opencv::{
     Result, calib3d,
-    core::{self, Point, Point2f, Point2i, Point3f, Scalar, Size, Vector},
+    core::{self, Point, Point2f, Point2i, Point3f, Rect, Scalar, Size, Vec3b, Vector},
     imgcodecs, imgproc,
     prelude::*,
 };
@@ -19,16 +19,15 @@ pub struct Settings {
     min_board_border_perimeter: f64,
     board_width: i32,
     board_height: i32,
-    expected_stone_radius: i32,
     stones_left_shift: i32,
     stones_right_shift: i32,
     stones_top_shift: i32,
     stones_bottom_shift: i32,
     stones_read_square_size: i32,
-    grid_left_shift: i32,
-    grid_right_shift: i32,
-    grid_top_shift: i32,
-    grid_bottom_shift: i32,
+    white_stone_threshold: u8,
+    black_stone_threshol: u8,
+    board_hue_value_from: u8,
+    board_hue_value_to: u8,
 }
 
 impl Settings {
@@ -37,16 +36,15 @@ impl Settings {
             min_board_border_perimeter: 3200.,
             board_width: 1000,
             board_height: 1000,
-            expected_stone_radius: 25,
             stones_left_shift: 17,
             stones_right_shift: 16,
             stones_top_shift: 5,
             stones_bottom_shift: 18,
-            stones_read_square_size: 20,
-            grid_left_shift: 17,
-            grid_right_shift: 16,
-            grid_top_shift: 15,
-            grid_bottom_shift: 15,
+            stones_read_square_size: 12,
+            white_stone_threshold: 190,
+            black_stone_threshol: 60,
+            board_hue_value_from: 5,
+            board_hue_value_to: 32,
         }
     }
 }
@@ -236,314 +234,31 @@ impl TimeMeasure {
     }
 }
 
-fn square_mean(gray: &Mat, center: Point2i, radius: i32) -> u8 {
+fn square_mean_hsv(bgr: &Mat, center: Point2i, radius: i32) -> Result<Vec3b> {
     let min_x = std::cmp::max(center.x - radius, 0);
-    let max_x = std::cmp::min(center.x + radius, gray.cols());
+    let max_x = std::cmp::min(center.x + radius, bgr.cols());
     let min_y = std::cmp::max(center.y - radius, 0);
-    let max_y = std::cmp::min(center.y + radius, gray.rows());
-    let mut summ: usize = 0;
-    let mut count: usize = 0;
-    for x in min_x..max_x {
-        for y in min_y..max_y {
-            unsafe {
-                if let Ok(val) = gray.at_2d_unchecked::<u8>(y, x) {
-                    summ += *val as usize;
-                    count += 1;
-                }
-            }
-        }
-    }
-    return (summ / count) as u8;
-}
-
-fn gen_and_write_grids(img: &Mat, settings: &Settings, board_size: usize) -> Result<()> {
-    // сетка камней
-    let mut stones_img = Mat::default();
-    imgproc::cvt_color(img, &mut stones_img, imgproc::COLOR_GRAY2BGR, 0)?;
-    let stones_x_step = (img.cols() - settings.stones_left_shift - settings.stones_right_shift)
-        as f32
-        / board_size as f32;
-    let stones_y_step = (img.rows() - settings.stones_top_shift - settings.stones_right_shift)
-        as f32
-        / board_size as f32;
-
-    let mut grid_img = Mat::default();
-    imgproc::cvt_color(img, &mut grid_img, imgproc::COLOR_GRAY2BGR, 0)?;
-    let grid_x_step = (img.cols() - settings.grid_left_shift - settings.grid_right_shift) as f32
-        / board_size as f32;
-    let grid_y_step = (img.rows() - settings.grid_top_shift - settings.grid_bottom_shift) as f32
-        / board_size as f32;
-
-    for i in 0..board_size {
-        let stones_xp1 = Point::new(
-            settings.stones_left_shift + (stones_x_step * i as f32 + stones_x_step / 2.) as i32,
-            settings.stones_top_shift,
-        );
-        let stones_xp2 = Point::new(stones_xp1.x, img.rows() - settings.stones_bottom_shift);
-        let stones_yp1 = Point::new(
-            settings.stones_left_shift,
-            settings.stones_top_shift + (stones_y_step * i as f32 + stones_y_step / 2.) as i32,
-        );
-        let stones_yp2 = Point::new(img.cols() - settings.stones_right_shift, stones_yp1.y);
-        imgproc::line(
-            &mut stones_img,
-            stones_xp1,
-            stones_xp2,
-            Scalar::new(0.0, 255.0, 0.0, 0.0), // Зелёный цвет
-            1,
-            imgproc::LINE_4,
-            0,
-        )?;
-        imgproc::line(
-            &mut stones_img,
-            stones_yp1,
-            stones_yp2,
-            Scalar::new(0.0, 255.0, 0.0, 0.0), // Зелёный цвет
-            1,
-            imgproc::LINE_4,
-            0,
-        )?;
-        let grid_xp1 = Point::new(
-            settings.grid_left_shift + (grid_x_step * i as f32 + grid_x_step / 2.) as i32,
-            settings.grid_top_shift,
-        );
-        let grid_xp2 = Point::new(grid_xp1.x, img.rows() - settings.grid_bottom_shift);
-        let grid_yp1 = Point::new(
-            settings.grid_left_shift,
-            settings.grid_top_shift + (grid_y_step * i as f32 + grid_y_step / 2.) as i32,
-        );
-        let grid_yp2 = Point::new(img.cols() - settings.grid_right_shift, grid_yp1.y);
-        imgproc::line(
-            &mut grid_img,
-            grid_xp1,
-            grid_xp2,
-            Scalar::new(0.0, 255.0, 0.0, 0.0), // Зелёный цвет
-            1,
-            imgproc::LINE_4,
-            0,
-        )?;
-        imgproc::line(
-            &mut grid_img,
-            grid_yp1,
-            grid_yp2,
-            Scalar::new(0.0, 255.0, 0.0, 0.0), // Зелёный цвет
-            1,
-            imgproc::LINE_4,
-            0,
-        )?;
-    }
-    opencv::imgcodecs::imwrite(
-        &(String::from(VISION_DUMP_DIR) + "expected_stones_marks.jpg"),
-        &stones_img,
-        &core::Vector::default(),
-    )?;
-    opencv::imgcodecs::imwrite(
-        &(String::from(VISION_DUMP_DIR) + "expected_grid_marks.jpg"),
-        &grid_img,
-        &core::Vector::default(),
-    )?;
-    Ok(())
-}
-
-pub fn find_stones(
-    settings: &Settings,
-    img: &Mat,
-    board_size: usize,
-    is_dump_steps: bool,
-) -> Result<Vec<(usize, usize)>> {
-    let mut blurred = Mat::default();
-    imgproc::gaussian_blur_def(&img, &mut blurred, core::Size::new(5, 5), 5.)?;
-    //определяем края
-    let mut binary = Mat::default();
-    imgproc::canny(&blurred, &mut binary, 30., 80., 3, true)?;
-    if is_dump_steps {
-        opencv::imgcodecs::imwrite(
-            &(String::from(VISION_DUMP_DIR) + "binary_stones.jpg"),
-            &binary,
-            &core::Vector::default(),
-        )?;
-    }
-
-    //сохраняем сетки которые для камней и разметки
-    if is_dump_steps {
-        gen_and_write_grids(img, settings, board_size)?;
-    }
-
-    //находим прямые линии по вертикали и горизонтали
-    let mut lines = Vector::<core::Vec4i>::new();
-    let mut line_detector = imgproc::create_line_segment_detector_def()?;
-    line_detector.detect_def(&binary, &mut lines)?;
-
-    let mut img_lines = Mat::default();
-    if is_dump_steps {
-        imgproc::cvt_color(&binary, &mut img_lines, imgproc::COLOR_GRAY2BGR, 0)?;
-    }
-
-    let min_line_len = (settings.expected_stone_radius as f32 * 0.2) as i32;
-    let grid_x_step = (settings.board_width - settings.grid_left_shift - settings.grid_right_shift)
-        as f32
-        / board_size as f32;
-    let grid_y_step = (settings.board_height - settings.grid_top_shift - settings.grid_bottom_shift)
-        as f32
-        / board_size as f32;
-    for line in lines {
-        let p1 = Point2i::new(line[0], line[1]);
-        let p2 = Point2i::new(line[2], line[3]);
-        let x_diff = (p1.x - p2.x).abs();
-        let y_diff = (p1.y - p2.y).abs();
-
-        let line_len = x_diff.max(y_diff);
-        if line_len < min_line_len {
-            continue;
-        }
-        // выбираем из всез линий только горизонтальные и вертикальные
-        let maximum_shift = (settings.expected_stone_radius as f64 * 0.12) as i32;
-        if x_diff > maximum_shift && y_diff > maximum_shift {
-            continue;
-        }
-
-        let x_mean = (p1.x + p2.x) / 2;
-        let y_mean = (p1.y + p2.y) / 2;
-        let is_vert = y_diff > x_diff;
-        // проверяем что линия близка к нашей сетки. Если это не так, то пропускаем её
-        let threshold = settings.expected_stone_radius / 3;
-        if is_vert {
-            let x = ((x_mean - settings.grid_left_shift) as f32 % grid_x_step) - grid_x_step / 2.;
-            if x.abs() as i32 > threshold {
-                continue;
-            }
-        } else {
-            let y = ((y_mean - settings.grid_top_shift) as f32 % grid_y_step) - grid_y_step / 2.;
-            if y.abs() as i32 > threshold {
-                continue;
-            }
-        }
-
-        if is_dump_steps {
-            imgproc::line(
-                &mut img_lines,
-                p1,
-                p2,
-                Scalar::new(0.0, 255.0, 0.0, 0.0), // Зелёный цвет
-                3,
-                imgproc::LINE_4,
-                0,
-            )?;
-        }
-        // вычитаем эти линии из нашей картинки
-        imgproc::line(
-            &mut binary,
-            p1,
-            p2,
-            Scalar::new(0.0, 0.0, 0.0, 0.0),
-            3,
-            imgproc::LINE_4,
-            0,
-        )?;
-    }
-    if is_dump_steps {
-        opencv::imgcodecs::imwrite(
-            &(String::from(VISION_DUMP_DIR) + "img_lines.jpg"),
-            &img_lines,
-            &core::Vector::default(),
-        )?;
-        opencv::imgcodecs::imwrite(
-            &(String::from(VISION_DUMP_DIR) + "before_circles.jpg"),
-            &binary,
-            &core::Vector::default(),
-        )?;
-    }
-
-    //попытка восстноваить круги и элипсы перед их распознованием
-    //    let kernel = imgproc::get_structuring_element(
-    //        imgproc::MORPH_ELLIPSE,
-    //        Size::new(3, 3),
-    //        Point::default(),
-    //    )?;
-    //    let mut morphology = Mat::default();
-    //    imgproc::morphology_ex(
-    //        &binary,
-    //        &mut morphology,
-    //        imgproc::MORPH_CLOSE,
-    //        &kernel,
-    //        Point::default(),
-    //        1,
-    //        core::BORDER_CONSTANT,
-    //        Scalar::default(),
-    //    )?;
-    //    if is_dump_steps {
-    //        opencv::imgcodecs::imwrite(
-    //            &(String::from(VISION_DUMP_DIR) + "after_morphology.jpg"),
-    //            &morphology,
-    //            &core::Vector::default(),
-    //        )?;
-    //    }
-
-    // теперь пытаемся расслаблено найти кружки здесь
-    let mut circles = Vector::<Point3f>::new();
-    imgproc::hough_circles(
-        &binary,
-        &mut circles,
-        imgproc::HOUGH_GRADIENT,
-        1.5,
-        settings.expected_stone_radius as f64 * 1.6,
-        50.,
-        28.,
-        (settings.expected_stone_radius as f64 * 0.8) as i32,
-        (settings.expected_stone_radius as f64 * 1.2) as i32,
-    )?;
-
-    let mut img_circles = Mat::default();
-    if is_dump_steps {
-        imgproc::cvt_color(&img, &mut img_circles, imgproc::COLOR_GRAY2BGR, 0)?;
-    }
-    let mut result = Vec::<(usize, usize)>::new();
-    let x_step = (settings.board_width - settings.stones_left_shift - settings.stones_right_shift)
-        as f32
-        / board_size as f32;
-    let y_step = (settings.board_height - settings.stones_top_shift - settings.stones_bottom_shift)
-        as f32
-        / board_size as f32;
-    for circle in circles {
-        let x = (circle.x.max(settings.stones_left_shift as f32)
-            - settings.stones_left_shift as f32)
-            / x_step;
-        let y = (circle.y.max(settings.stones_top_shift as f32) - settings.stones_top_shift as f32)
-            / y_step;
-        result.push((x as usize, y as usize));
-        if is_dump_steps {
-            imgproc::circle(
-                &mut img_circles,
-                Point::new(circle.x as i32, circle.y as i32),
-                circle.z as i32,
-                Scalar::new(0.0, 255.0, 0.0, 0.0), // Зелёный цвет
-                2,
-                imgproc::LINE_AA,
-                0,
-            )?;
-        }
-    }
-    if is_dump_steps {
-        opencv::imgcodecs::imwrite(
-            &(String::from(VISION_DUMP_DIR) + "img_circles.jpg"),
-            &img_circles,
-            &core::Vector::default(),
-        )?;
-    }
-    Ok(result)
+    let max_y = std::cmp::min(center.y + radius, bgr.rows());
+    let roi = Rect::new(min_x, min_y, max_x - min_x, max_y - min_y);
+    let region = Mat::roi(bgr, roi)?;
+    let mean = core::mean_def(&region)?;
+    let bgr_pixel = Mat::new_rows_cols_with_default(1, 1, core::CV_8UC3, mean)?;
+    let mut hsv_pixel = Mat::default();
+    imgproc::cvt_color(&bgr_pixel, &mut hsv_pixel, imgproc::COLOR_BGR2HSV, 0)?;
+    let hsv_values = hsv_pixel.at_2d::<Vec3b>(0, 0)?;
+    Ok(*hsv_values)
 }
 
 pub fn read_stones(
     settings: &Settings,
     img: &Mat,
-    stones: Vec<(usize, usize)>,
     board_size: usize,
     is_dump_steps: bool,
 ) -> Result<Board> {
     let mut board = Board::new_with_size(board_size);
 
-    let mut debug_img: Option<Mat> = if is_dump_steps {
-        Some(img.clone())
+    let mut debug_img: Option<(Mat, Mat, Mat)> = if is_dump_steps {
+        Some((img.clone(), img.clone(), img.clone()))
     } else {
         None
     };
@@ -555,50 +270,107 @@ pub fn read_stones(
     let horz_step = horz_size as f32 / board_size as f32;
     let vert_step = vert_size as f32 / board_size as f32;
 
-    for (x, y) in stones {
-        let radius = settings.stones_read_square_size;
-        let center_x = x as f32 * horz_step + horz_step / 2. + settings.stones_left_shift as f32;
-        let center_y = y as f32 * vert_step + vert_step / 2. + settings.stones_top_shift as f32;
-        let center = core::Point::new(center_x as i32, center_y as i32);
-        let value = square_mean(&img, center, radius);
+    for x in 0..board_size {
+        for y in 0..board_size {
+            let radius = settings.stones_read_square_size;
+            let center_x =
+                x as f32 * horz_step + horz_step / 2. + settings.stones_left_shift as f32;
+            let center_y = y as f32 * vert_step + vert_step / 2. + settings.stones_top_shift as f32;
+            let center = core::Point::new(center_x as i32, center_y as i32);
+            let hsv = square_mean_hsv(&img, center, radius)?;
+            let value = hsv[2];
+            let hue = hsv[0];
 
-        let pos_y = board_size - y - 1;
-        let threshold = u8::MAX / 2;
-        if value < threshold {
-            board.set(Pos::new(x, pos_y), Cell::black_stone());
-        } else {
-            board.set(Pos::new(x, pos_y), Cell::white_stone());
-        }
-        if let Some(image) = &mut debug_img {
-            let rect =
-                core::Rect::new(center.x - radius, center.y - radius, radius * 2, radius * 2);
-            //рисуем прямоуголники в которых считали
-            imgproc::rectangle(
-                image,
-                rect,
-                core::Scalar::new(0.0, 0.0, 255.0, 0.0),
-                1,
-                imgproc::LINE_8,
-                0,
-            )?;
-            // Подписываем значение
-            imgproc::put_text(
-                image,
-                &format!("{value}"),
-                core::Point::new(center.x - 20, center.y),
-                imgproc::FONT_HERSHEY_SIMPLEX,
-                0.4,
-                core::Scalar::new(255.0, 0.0, 255.0, 0.0),
-                1,
-                imgproc::LINE_AA,
-                false,
-            )?;
+            let pos_y = board_size - y - 1;
+            // если мы видем цвет доски, то камни там не считываем
+            if hue < settings.board_hue_value_from || settings.board_hue_value_to < hue {
+                if value <= settings.black_stone_threshol {
+                    board.set(Pos::new(x, pos_y), Cell::black_stone());
+                } else if value >= settings.white_stone_threshold {
+                    board.set(Pos::new(x, pos_y), Cell::white_stone());
+                }
+            }
+            if let Some((h, s, v)) = &mut debug_img {
+                let rect =
+                    core::Rect::new(center.x - radius, center.y - radius, radius * 2, radius * 2);
+                //рисуем прямоуголники в которых считали
+                imgproc::rectangle(
+                    h,
+                    rect,
+                    core::Scalar::new(0.0, 0.0, 255.0, 0.0),
+                    1,
+                    imgproc::LINE_8,
+                    0,
+                )?;
+                imgproc::rectangle(
+                    s,
+                    rect,
+                    core::Scalar::new(0.0, 0.0, 255.0, 0.0),
+                    1,
+                    imgproc::LINE_8,
+                    0,
+                )?;
+                imgproc::rectangle(
+                    v,
+                    rect,
+                    core::Scalar::new(0.0, 0.0, 255.0, 0.0),
+                    1,
+                    imgproc::LINE_8,
+                    0,
+                )?;
+                // Подписываем значение
+                imgproc::put_text(
+                    h,
+                    &format!("{}", hsv[0]),
+                    core::Point::new(center.x - 10, center.y),
+                    imgproc::FONT_HERSHEY_SIMPLEX,
+                    0.4,
+                    core::Scalar::new(255.0, 0.0, 255.0, 0.0),
+                    1,
+                    imgproc::LINE_AA,
+                    false,
+                )?;
+                // Подписываем значение
+                imgproc::put_text(
+                    s,
+                    &format!("{}", hsv[1]),
+                    core::Point::new(center.x - 10, center.y),
+                    imgproc::FONT_HERSHEY_SIMPLEX,
+                    0.4,
+                    core::Scalar::new(255.0, 0.0, 255.0, 0.0),
+                    1,
+                    imgproc::LINE_AA,
+                    false,
+                )?;
+                // Подписываем значение
+                imgproc::put_text(
+                    v,
+                    &format!("{}", hsv[2]),
+                    core::Point::new(center.x - 10, center.y),
+                    imgproc::FONT_HERSHEY_SIMPLEX,
+                    0.4,
+                    core::Scalar::new(255.0, 0.0, 255.0, 0.0),
+                    1,
+                    imgproc::LINE_AA,
+                    false,
+                )?;
+            }
         }
     }
-    if let Some(image) = &debug_img {
+    if let Some((h, s, v)) = &debug_img {
         opencv::imgcodecs::imwrite(
-            &(String::from(VISION_DUMP_DIR) + "stones.jpg"),
-            &image,
+            &(String::from(VISION_DUMP_DIR) + "stones_H.jpg"),
+            &h,
+            &core::Vector::default(),
+        )?;
+        opencv::imgcodecs::imwrite(
+            &(String::from(VISION_DUMP_DIR) + "stones_S.jpg"),
+            &s,
+            &core::Vector::default(),
+        )?;
+        opencv::imgcodecs::imwrite(
+            &(String::from(VISION_DUMP_DIR) + "stones_V.jpg"),
+            &v,
             &core::Vector::default(),
         )?;
     }

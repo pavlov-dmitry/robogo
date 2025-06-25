@@ -107,8 +107,7 @@ impl Vision {
 
         if let Some(border) = proc::find_board_border(&settings.proc, &frame, is_dump_steps)? {
             let warped_img = proc::warp_board_by_border(&settings.proc, &border, &frame)?;
-            let stones = proc::find_stones(&settings.proc, &warped_img, 19, is_dump_steps)?;
-            let board = proc::read_stones(&settings.proc, &warped_img, stones, 19, is_dump_steps)?;
+            let board = proc::read_stones(&settings.proc, &warped_img, 19, is_dump_steps)?;
             return Ok(Some((board, frame)));
         }
 
@@ -278,12 +277,13 @@ pub fn parse_board_from(
 ) -> Result<Option<Board>> {
     let mut time_measure = TimeMeasure::tick();
     let img = imgcodecs::imread(photo_filename, imgcodecs::IMREAD_COLOR)?;
-    let img = proc::convert_to_grayscale(&img)?;
     time_measure.print_elapsed_ms_and_tick("image read");
+    let gray = proc::convert_to_grayscale(&img)?;
+    time_measure.print_elapsed_ms_and_tick("convert to gray");
 
     let mut full_proc_time_measure = TimeMeasure::tick();
 
-    let border = proc::find_board_border(&settings.proc, &img, is_dump_steps)?;
+    let border = proc::find_board_border(&settings.proc, &gray, is_dump_steps)?;
     time_measure.print_elapsed_ms_and_tick("find board border");
 
     let board = match border {
@@ -291,11 +291,8 @@ pub fn parse_board_from(
             let warped = proc::warp_board_by_border(&settings.proc, &border, &img)?;
             time_measure.print_elapsed_ms_and_tick("warp board");
 
-            let stones = proc::find_stones(&settings.proc, &warped, 19, is_dump_steps)?;
-            time_measure.print_elapsed_ms_and_tick("find circles");
-
-            let board = proc::read_stones(&settings.proc, &warped, stones, 19, is_dump_steps)?;
-            time_measure.print_elapsed_ms_and_tick("find stones");
+            let board = proc::read_stones(&settings.proc, &warped, 19, is_dump_steps)?;
+            time_measure.print_elapsed_ms_and_tick("read stones");
 
             Some(board)
         }
