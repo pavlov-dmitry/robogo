@@ -2,6 +2,7 @@
 /vision_dump
 /katago
 /vision_errors
+/more_than_one_stone_diffs
 /etc
 /calibration
 /*.jpg

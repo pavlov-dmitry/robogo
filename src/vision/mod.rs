@@ -21,8 +21,7 @@ static DEFAULT_CAMERA_CALIBRATION_PATH: &str = "./etc/camera_calibration.json";
 pub struct Settings {
     pub proc: proc::Settings,
     save_more_than_one_stone_diffs: bool,
-    single_stone_stable_board_time_ms: u32,
-    many_stones_stable_board_time_ms: u32,
+    stable_board_frames_count: usize,
 }
 
 impl Settings {
@@ -30,8 +29,7 @@ impl Settings {
         Settings {
             proc: proc::Settings::default(),
             save_more_than_one_stone_diffs: true,
-            single_stone_stable_board_time_ms: 500,
-            many_stones_stable_board_time_ms: 1500,
+            stable_board_frames_count: 7,
         }
     }
 }
@@ -122,24 +120,25 @@ impl Vision {
     ) {
         let mut sended_board = Board::default();
         let mut last_board = Board::default();
-        let mut last_board_time = std::time::SystemTime::now();
-        let mut is_only_one_stone_added_from_last_update = true;
+        let mut stable_board_frames_count: usize = 0;
 
         loop {
             if quit_rx.try_recv().is_ok() {
                 break;
             }
             match Vision::read_board(&mut camera, &settings, false) {
-                Ok(maybe_board) => {
-                    if let Some((brd, frame)) = maybe_board {
+                Ok(maybe_board) => match maybe_board {
+                    Some((brd, frame)) => {
                         let diff = board::diff(&last_board, &brd);
-                        let is_only_one_stone_added = diff.len() == 1
-                            && match diff[0] {
-                                board::Action::Add(_, _) => true,
-                                _ => false,
-                            };
 
-                        if !diff.is_empty() {
+                        if diff.is_empty() {
+                            stable_board_frames_count += 1;
+                        } else {
+                            let is_only_one_stone_added = diff.len() == 1
+                                && match diff[0] {
+                                    board::Action::Add(_, _) => true,
+                                    _ => false,
+                                };
                             // специальный режим если изменений больше одного камня отбросить фотографии в отдеьлную папку
                             if settings.save_more_than_one_stone_diffs && !is_only_one_stone_added {
                                 let filename = format!(
@@ -154,33 +153,29 @@ impl Vision {
                             }
 
                             last_board = brd;
-                            last_board_time = std::time::SystemTime::now();
-                            is_only_one_stone_added_from_last_update &= is_only_one_stone_added;
-                            println!("is only one: {is_only_one_stone_added}");
+                            stable_board_frames_count = 0;
                         }
                     }
-                }
+                    None => {
+                        stable_board_frames_count = 0;
+                    }
+                },
                 Err(e) => {
                     let _ = tx.send(VisionMsg::Error(e));
                     break;
                 }
             }
-            if let Ok(dur) = last_board_time.elapsed() {
-                let is_one_stone_time = is_only_one_stone_added_from_last_update
-                    && dur.as_millis() > settings.single_stone_stable_board_time_ms as u128;
-                let is_many_stones_time = !is_only_one_stone_added_from_last_update
-                    && dur.as_millis() > settings.many_stones_stable_board_time_ms as u128;
-                let is_time_to_send = is_one_stone_time || is_many_stones_time;
+            if stable_board_frames_count >= settings.stable_board_frames_count
+                && has_diff(&sended_board, &last_board)
+            {
+                stable_board_frames_count = 0;
+                sended_board = last_board.clone();
 
-                if is_time_to_send && has_diff(&sended_board, &last_board) {
-                    sended_board = last_board.clone();
-                    is_only_one_stone_added_from_last_update = true;
-                    if let Err(_) = tx.send(VisionMsg::Board(Box::new(sended_board.clone()))) {
-                        break;
-                    }
+                if let Err(_) = tx.send(VisionMsg::Board(Box::new(sended_board.clone()))) {
+                    break;
                 }
             }
-            std::thread::sleep(std::time::Duration::from_millis(20));
+            std::thread::sleep(std::time::Duration::from_millis(1));
         }
     }
 
