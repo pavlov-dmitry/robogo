@@ -5,6 +5,8 @@ mod speech;
 mod vision;
 
 use clap::{Parser, Subcommand};
+use cpal::traits::*;
+use fvad;
 use std::str::FromStr;
 
 #[derive(Parser)]
@@ -36,6 +38,9 @@ enum Commands {
 
     ///Тесты зрения. на вход папка с подпаками тестами где есть photo.jpg и board.txt. Если board.txt нет значит ничего не должно распозноваться
     VisionTests { tests_dir: String },
+
+    /// Режим тестирования распознования голоса
+    Listen,
 }
 
 fn game() -> Result<()> {
@@ -198,6 +203,54 @@ fn vision_tests(tests_dir: &str) -> Result<()> {
     Ok(())
 }
 
+fn is_voice(vad: &mut fvad::Fvad, data: &[i16]) -> Option<bool> {
+    let mut result = None;
+    let frame_size = 320;
+    for i in 0..(data.len() / frame_size) {
+        let frame = &data[frame_size * i..frame_size * (i + 1)];
+        result = vad.is_voice_frame(frame);
+        match result {
+            Some(true) => break,
+            _ => {}
+        }
+    }
+    result
+}
+
+fn listen_test() {
+    let host = cpal::default_host();
+    let device = host.default_input_device().expect("No input audio device");
+    let config = cpal::StreamConfig {
+        channels: 1,
+        sample_rate: cpal::SampleRate(16000),
+        buffer_size: cpal::BufferSize::Default,
+    };
+    let mut fvad = fvad::Fvad::new()
+        .expect("not enough memory to create Fvad")
+        .set_mode(fvad::Mode::Quality)
+        .set_sample_rate(fvad::SampleRate::Rate16kHz);
+
+    let stream = device
+        .build_input_stream(
+            &config,
+            move |data: &[i16], _| {
+                if let Some(true) = is_voice(&mut fvad, data) {
+                    println!("some voice");
+                }
+            },
+            move |err| {
+                println!("AUDIO ERROR! {}", err);
+            },
+            None,
+        )
+        .unwrap();
+    stream.play().expect("cant play stream");
+    println!("Press Ctrl+C for exit.");
+    loop {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     if let Some(cmd) = cli.command {
@@ -225,6 +278,8 @@ fn main() -> Result<()> {
             }
 
             Commands::VisionTests { tests_dir } => vision_tests(&tests_dir),
+
+            Commands::Listen => Ok(listen_test()),
         }
     } else {
         // по дефолту сразу переходиим к игре

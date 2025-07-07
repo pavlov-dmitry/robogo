@@ -142,7 +142,7 @@ impl Vision {
                             // специальный режим если изменений больше одного камня отбросить фотографии в отдеьлную папку
                             if settings.save_more_than_one_stone_diffs && !is_only_one_stone_added {
                                 let filename = format!(
-                                    "./more_than_one_stone_diffs/photo_{}.jpg/",
+                                    "./more_than_one_stone_diffs/photo_{}.jpg",
                                     timestamp()
                                 );
                                 let _ = opencv::imgcodecs::imwrite(

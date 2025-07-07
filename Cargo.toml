@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-opencv = "*"
+opencv = { version = "*", features = ["clang-runtime"] }
 chrono = "*"
-clap = { version = "4.5.39", features = ["derive"] }
+clap = { version = "*", features = ["derive"] }
+cpal = "*"
+fvad = "*"
