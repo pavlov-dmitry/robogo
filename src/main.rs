@@ -6,8 +6,8 @@ mod vision;
 
 use clap::{Parser, Subcommand};
 use cpal::traits::*;
-use fvad;
 use std::str::FromStr;
+use vosk;
 
 #[derive(Parser)]
 #[command(version, about, long_about=None)]
@@ -203,20 +203,6 @@ fn vision_tests(tests_dir: &str) -> Result<()> {
     Ok(())
 }
 
-fn is_voice(vad: &mut fvad::Fvad, data: &[i16]) -> Option<bool> {
-    let mut result = None;
-    let frame_size = 320;
-    for i in 0..(data.len() / frame_size) {
-        let frame = &data[frame_size * i..frame_size * (i + 1)];
-        result = vad.is_voice_frame(frame);
-        match result {
-            Some(true) => break,
-            _ => {}
-        }
-    }
-    result
-}
-
 fn listen_test() {
     let host = cpal::default_host();
     let device = host.default_input_device().expect("No input audio device");
@@ -225,21 +211,29 @@ fn listen_test() {
         sample_rate: cpal::SampleRate(16000),
         buffer_size: cpal::BufferSize::Default,
     };
-    let mut fvad = fvad::Fvad::new()
-        .expect("not enough memory to create Fvad")
-        .set_mode(fvad::Mode::Quality)
-        .set_sample_rate(fvad::SampleRate::Rate16kHz);
+    let vosk_model =
+        vosk::Model::new("./vosk-model-small-ru-0.22").expect("can not create Vosk model");
+    let mut recognizer =
+        vosk::Recognizer::new(&vosk_model, 16000.0)
+            .expect("can noe create Vosk Recognizer");
 
     let stream = device
         .build_input_stream(
             &config,
             move |data: &[i16], _| {
-                if let Some(true) = is_voice(&mut fvad, data) {
-                    println!("some voice");
+                match recognizer.accept_waveform(data) {
+                    Ok(state) => match state {
+                        vosk::DecodingState::Finalized => {
+                            let result = recognizer.result().single().expect("single result");
+                            println!("{}", result.text);
+                        }
+                        _ => {}
+                    },
+                    Err(e) => println!("Error: {}", e),
                 }
             },
             move |err| {
-                println!("AUDIO ERROR! {}", err);
+                println!("MICROPHONE STREAM ERROR: {}", err);
             },
             None,
         )

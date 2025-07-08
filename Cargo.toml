@@ -8,4 +8,4 @@ opencv = { version = "*", features = ["clang-runtime"] }
 chrono = "*"
 clap = { version = "*", features = ["derive"] }
 cpal = "*"
-fvad = "*"
+vosk = "*"
