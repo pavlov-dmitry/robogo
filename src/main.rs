@@ -1,13 +1,12 @@
 mod board;
 mod game;
 mod katago;
+mod listen;
 mod speech;
 mod vision;
 
 use clap::{Parser, Subcommand};
-use cpal::traits::*;
 use std::str::FromStr;
-use vosk;
 
 #[derive(Parser)]
 #[command(version, about, long_about=None)]
@@ -204,44 +203,18 @@ fn vision_tests(tests_dir: &str) -> Result<()> {
 }
 
 fn listen_test() {
-    let host = cpal::default_host();
-    let device = host.default_input_device().expect("No input audio device");
-    let config = cpal::StreamConfig {
-        channels: 1,
-        sample_rate: cpal::SampleRate(16000),
-        buffer_size: cpal::BufferSize::Default,
-    };
-    let vosk_model =
-        vosk::Model::new("./vosk-model-small-ru-0.22").expect("can not create Vosk model");
-    let mut recognizer =
-        vosk::Recognizer::new(&vosk_model, 16000.0)
-            .expect("can noe create Vosk Recognizer");
-
-    let stream = device
-        .build_input_stream(
-            &config,
-            move |data: &[i16], _| {
-                match recognizer.accept_waveform(data) {
-                    Ok(state) => match state {
-                        vosk::DecodingState::Finalized => {
-                            let result = recognizer.result().single().expect("single result");
-                            println!("{}", result.text);
-                        }
-                        _ => {}
-                    },
-                    Err(e) => println!("Error: {}", e),
-                }
-            },
-            move |err| {
-                println!("MICROPHONE STREAM ERROR: {}", err);
-            },
-            None,
-        )
-        .unwrap();
-    stream.play().expect("cant play stream");
-    println!("Press Ctrl+C for exit.");
+    println!("Creating listen...");
+    let mut listen = listen::Listen::new();
+    listen.spawn();
+    println!("Listen started. Press Ctrl+C for exit.");
     loop {
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        match listen.step() {
+            Some(msg) => match msg {
+                listen::Msg::Text(txt) => println!("{txt}"),
+                listen::Msg::Err(e) => println!("Error {:?}", e),
+            },
+            None => std::thread::sleep(std::time::Duration::from_millis(10)),
+        }
     }
 }
 
