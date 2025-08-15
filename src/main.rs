@@ -204,7 +204,7 @@ fn vision_tests(tests_dir: &str) -> Result<()> {
 
 fn listen_test() {
     println!("Creating listen...");
-    let mut listen = listen::Listen::new();
+    let mut listen = listen::Listen::new(listen::VoiceCommandsSettings::default());
     listen.spawn();
     println!("Listen started. Press Ctrl+C for exit.");
     loop {
@@ -212,6 +212,9 @@ fn listen_test() {
             Some(msg) => match msg {
                 listen::Msg::Text(txt) => println!("{txt}"),
                 listen::Msg::Err(e) => println!("Error {:?}", e),
+                listen::Msg::Cmd(cmd) => {
+                    println!("Voice Commnd: {:?}", cmd);
+                }
             },
             None => std::thread::sleep(std::time::Duration::from_millis(10)),
         }

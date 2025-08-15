@@ -5,10 +5,13 @@ use std::{
 };
 use vosk;
 
+type CmdParserPtr = Box<dyn CmdParser>;
+
 pub struct Listen {
     vosk_model: Option<vosk::Model>,
     thread_handler: Option<JoinHandle<()>>,
-    text_rx: Option<Receiver<String>>,
+    msg_rx: Option<Receiver<Msg>>,
+    voice_settings: VoiceCommandsSettings,
 }
 
 #[derive(Debug)]
@@ -16,24 +19,109 @@ pub enum Error {
     ThreadDisconnected,
 }
 
+#[derive(Debug, Clone)]
+pub enum VoiceCmd {
+    Yes,
+    No,
+    Pass,
+    Resign,
+}
+
 pub enum Msg {
     Text(String),
+    Cmd(VoiceCmd),
     Err(Error),
 }
 
+#[derive(Clone)]
+pub struct VoiceCommandsSettings {
+    name: String,
+    yes: Vec<String>,
+    no: Vec<String>,
+    ingame_resign: Vec<String>,
+    ingame_pass: Vec<String>,
+}
+
+impl Default for VoiceCommandsSettings {
+    fn default() -> Self {
+        VoiceCommandsSettings {
+            name: String::from("сай"),
+            yes: vec![String::from("да")],
+            no: vec![String::from("нет")],
+            ingame_resign: vec![String::from("сдаюсь"), String::from("я сдаюсь")],
+            ingame_pass: vec![String::from("пас"), String::from("я пасую")],
+        }
+    }
+}
+
+trait CmdParser {
+    fn parse(&self, txt: &str) -> Option<VoiceCmd>;
+}
+
+struct SimpleCmdParser {
+    patterns: Vec<String>,
+    val: VoiceCmd,
+}
+
+impl SimpleCmdParser {
+    fn new(ptrns: &Vec<String>, val: VoiceCmd) -> SimpleCmdParser {
+        SimpleCmdParser {
+            patterns: ptrns.clone(),
+            val: val,
+        }
+    }
+}
+
+impl CmdParser for SimpleCmdParser {
+    fn parse(&self, txt: &str) -> Option<VoiceCmd> {
+        for pattern in &self.patterns {
+            if txt.starts_with(pattern) {
+                return Some(self.val.clone());
+            }
+        }
+        None
+    }
+}
+
+fn create_simple_processor(ptrns: &Vec<String>, val: VoiceCmd) -> CmdParserPtr {
+    Box::new(SimpleCmdParser::new(ptrns, val))
+}
+
+fn create_voice_cmd_parsers(voice_cmd_settings: &VoiceCommandsSettings) -> Vec<CmdParserPtr> {
+    let mut result = Vec::new();
+    result.push(create_simple_processor(
+        &voice_cmd_settings.yes,
+        VoiceCmd::Yes,
+    ));
+    result.push(create_simple_processor(
+        &voice_cmd_settings.no,
+        VoiceCmd::No,
+    ));
+    result.push(create_simple_processor(
+        &voice_cmd_settings.ingame_pass,
+        VoiceCmd::Pass,
+    ));
+    result.push(create_simple_processor(
+        &voice_cmd_settings.ingame_resign,
+        VoiceCmd::Resign,
+    ));
+    result
+}
+
 impl Listen {
-    pub fn new() -> Listen {
+    pub fn new(voice_settings: VoiceCommandsSettings) -> Listen {
         Listen {
             vosk_model: None,
             thread_handler: None,
-            text_rx: None,
+            msg_rx: None,
+            voice_settings: voice_settings,
         }
     }
 
     pub fn step(&self) -> Option<Msg> {
-        if let Some(rx) = &self.text_rx {
+        if let Some(rx) = &self.msg_rx {
             match rx.try_recv() {
-                Ok(txt) => Some(Msg::Text(txt)),
+                Ok(msg) => Some(msg),
                 Err(e) => match e {
                     TryRecvError::Empty => None,
                     TryRecvError::Disconnected => Some(Msg::Err(Error::ThreadDisconnected)),
@@ -51,15 +139,21 @@ impl Listen {
         let recognizer = vosk::Recognizer::new(self.vosk_model.as_ref().unwrap(), 16000.0)
             .expect("can not create Vosk Recognizer");
 
-        let (text_tx, text_rx) = mpsc::channel::<String>();
+        let voice_settings = self.voice_settings.clone();
+        let (msg_tx, msg_rx) = mpsc::channel::<Msg>();
         let handler = std::thread::spawn(move || {
-            Listen::main_loop(recognizer, text_tx);
+            Listen::main_loop(recognizer, voice_settings, msg_tx);
         });
         self.thread_handler = Some(handler);
-        self.text_rx = Some(text_rx);
+        self.msg_rx = Some(msg_rx);
     }
 
-    fn main_loop(mut recognizer: vosk::Recognizer, text_tx: Sender<String>) {
+    fn main_loop(
+        mut recognizer: vosk::Recognizer,
+        voice_settings: VoiceCommandsSettings,
+        msg_tx: Sender<Msg>,
+    ) {
+        let parsers = create_voice_cmd_parsers(&voice_settings);
         let host = cpal::default_host();
         let device = host.default_input_device().expect("No input audio device");
         let config = cpal::StreamConfig {
@@ -91,7 +185,14 @@ impl Listen {
                     Ok(state) => match state {
                         vosk::DecodingState::Finalized => {
                             let result = recognizer.result().single().expect("single result");
-                            let _ = text_tx.send(String::from(result.text));
+                            let _ = msg_tx.send(Msg::Text(String::from(result.text)));
+                            match Listen::process_cmds(result.text, &voice_settings.name, &parsers)
+                            {
+                                Some(cmd) => {
+                                    let _ = msg_tx.send(Msg::Cmd(cmd));
+                                }
+                                None => {}
+                            }
                         }
                         _ => {}
                     },
@@ -101,6 +202,31 @@ impl Listen {
                     println!("Recieve Error: {}", e);
                 }
             }
+        }
+    }
+
+    fn process_cmds(txt: &str, name: &str, parsers: &Vec<CmdParserPtr>) -> Option<VoiceCmd> {
+        let name_chars_count = name.chars().count();
+        //сначало в строке ищем наше имя
+        match txt.find(name) {
+            Some(index) => {
+                println!("name found: {index}");
+                let start_with_name = &txt[index..];
+                let all_chars = start_with_name.chars();
+                if name_chars_count + 1 >= all_chars.clone().count() {
+                    return None;
+                }
+                let after_name: String = all_chars.skip(name_chars_count + 1).collect();
+
+                //после имени должны быть наши команды. пока рассчитываем что комнада сразу была слитно произенесена без пауз
+                for cmd_parser in parsers {
+                    if let Some(cmd) = cmd_parser.parse(&after_name) {
+                        return Some(cmd);
+                    }
+                }
+                None
+            }
+            None => None,
         }
     }
 }
