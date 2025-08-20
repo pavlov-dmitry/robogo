@@ -98,12 +98,12 @@ impl Vision {
     ) -> opencv::Result<Option<(Board, Mat)>> {
         let mut frame = Mat::default();
         camera.read(&mut frame)?;
-        let frame = proc::convert_to_grayscale(&frame)?;
-        if frame.empty() {
+        let gray_frame = proc::convert_to_grayscale(&frame)?;
+        if gray_frame.empty() {
             return Ok(None);
         }
 
-        if let Some(border) = proc::find_board_border(&settings.proc, &frame, is_dump_steps)? {
+        if let Some(border) = proc::find_board_border(&settings.proc, &gray_frame, is_dump_steps)? {
             let warped_img = proc::warp_board_by_border(&settings.proc, &border, &frame)?;
             let board = proc::read_stones(&settings.proc, &warped_img, 19, is_dump_steps)?;
             return Ok(Some((board, frame)));
