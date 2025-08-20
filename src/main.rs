@@ -8,6 +8,8 @@ mod vision;
 use clap::{Parser, Subcommand};
 use std::str::FromStr;
 
+use crate::listen::VoiceCommandsSettings;
+
 #[derive(Parser)]
 #[command(version, about, long_about=None)]
 struct Cli {
@@ -47,9 +49,11 @@ fn game() -> Result<()> {
     let mut katago = katago::Katago::new(katago::Settings::default())?;
     let mut vision = vision::Vision::new(vision::Settings::default())?;
     let mut speech = speech::Speech::new(speech::Settings::default());
+    let mut listen = listen::Listen::new(VoiceCommandsSettings::default());
 
     vision.spawn();
     katago.spawn();
+    listen.spawn();
 
     loop {
         let mut nothing_todo = true;
@@ -68,6 +72,14 @@ fn game() -> Result<()> {
                 katago::Msg::State(state) => game.on_ai_state_update(state),
                 katago::Msg::Move(mv) => game.on_ai_move(mv),
                 katago::Msg::Error(e) => return Err(Error::from(e)),
+            }
+        }
+        if let Some(msg) = listen.step() {
+            nothing_todo = false;
+            match msg {
+                listen::Msg::Text(txt) => println!("Human say: {txt}"),
+                listen::Msg::Cmd(cmd) => game.on_voice_cmd(cmd),
+                listen::Msg::Err(e) => return Err(Error::from(e)),
             }
         }
         // обработка подсистемы ведения игры
@@ -101,7 +113,12 @@ fn game() -> Result<()> {
         }
     }
 
-    Ok(())
+    loop {
+        println!("Game finished! Press Ctrl+C");
+        speech.step();
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+    //Ok(())
 }
 
 fn vision() -> Result<()> {
@@ -267,6 +284,7 @@ enum Error {
     Katago(katago::Error),
     Speech(speech::Error),
     Vision(vision::Error),
+    Listen(listen::Error),
     Game(game::Error),
     BoardParseError,
     Io(std::io::Error),
@@ -302,5 +320,10 @@ impl From<board::BoardParseError> for Error {
 impl From<std::io::Error> for Error {
     fn from(value: std::io::Error) -> Self {
         Error::Io(value)
+    }
+}
+impl From<listen::Error> for Error {
+    fn from(value: listen::Error) -> Self {
+        Error::Listen(value)
     }
 }

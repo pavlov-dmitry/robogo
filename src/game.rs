@@ -1,3 +1,5 @@
+use crate::listen;
+
 use super::board::{self, Action, Board, Move};
 use super::katago;
 use super::speech::ToSpeech;
@@ -106,7 +108,32 @@ impl Game {
         self.say_about_last_move();
         if let Move::Resign = mv {
             self.set_state(State::Finished);
+            self.send(Msg::Speech(String::from(
+                "В этот раз ты победил. Я сдаюсь. Да, да, ты правильно услышал. Я сдаюсь.",
+            )));
             self.send(Msg::GameFinished);
+        }
+    }
+
+    pub fn on_voice_cmd(&mut self, cmd: listen::VoiceCmd) {
+        match self.state {
+            State::WaitingHumanMove => {
+                match cmd {
+                    listen::VoiceCmd::Pass => {
+                        self.send(Msg::HumanPlay(self.human_color, Move::Pass));
+                    }
+                    listen::VoiceCmd::Resign => {
+                        //self.send(Msg::HumanPlay(self.human_color, Move::Resign));
+                        self.set_state(State::Finished);
+                        self.send(Msg::Speech(String::from(
+                            "Сдался? Так рано? Ну ладно. Правда я сильный?",
+                        )));
+                        self.send(Msg::GameFinished);
+                    }
+                    _ => {} // игнорируем другие пока
+                }
+            }
+            _ => {} // обрабатываем голосовые команды только в рожидании хода человека
         }
     }
 

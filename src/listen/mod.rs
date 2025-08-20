@@ -185,13 +185,18 @@ impl Listen {
                     Ok(state) => match state {
                         vosk::DecodingState::Finalized => {
                             let result = recognizer.result().single().expect("single result");
-                            let _ = msg_tx.send(Msg::Text(String::from(result.text)));
-                            match Listen::process_cmds(result.text, &voice_settings.name, &parsers)
-                            {
-                                Some(cmd) => {
-                                    let _ = msg_tx.send(Msg::Cmd(cmd));
+                            if !result.text.is_empty() {
+                                let _ = msg_tx.send(Msg::Text(String::from(result.text)));
+                                match Listen::process_cmds(
+                                    result.text,
+                                    &voice_settings.name,
+                                    &parsers,
+                                ) {
+                                    Some(cmd) => {
+                                        let _ = msg_tx.send(Msg::Cmd(cmd));
+                                    }
+                                    None => {}
                                 }
-                                None => {}
                             }
                         }
                         _ => {}
