@@ -223,6 +223,13 @@ impl Gtp {
         let position = board::Pos::from_str(pos_str.trim())?;
         Ok(Move::Stone(position))
     }
+
+    pub fn save_current_position_to_sgf(&mut self, filaneme: &str) -> Result<bool> {
+        let cmd = format!("savesgf {filaneme}");
+        let answer = self.send(&cmd)?;
+        let result = answer.starts_with("=");
+        Ok(result)
+    }
 }
 
 impl std::fmt::Display for State {

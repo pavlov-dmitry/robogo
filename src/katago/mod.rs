@@ -94,6 +94,15 @@ impl Katago {
         };
     }
 
+    fn save_current_pos(msg_tx: &mut Sender<Msg>, gtp: &mut Gtp) {
+        match gtp.save_current_position_to_sgf("./current.sgf") {
+            Ok(_) => {}
+            Err(e) => {
+                let _ = msg_tx.send(Msg::Error(Error::from(e)));
+            }
+        };
+    }
+
     fn main_loop(mut gtp: Gtp, cmd_rx: Receiver<Cmd>, mut msg_tx: Sender<Msg>) {
         // ждем загрузки katago
         if let Err(e) = gtp.wait_gtp_ready() {
@@ -108,6 +117,7 @@ impl Katago {
                         let _ = msg_tx.send(Msg::Error(Error::from(e)));
                     }
                     Katago::send_state(&mut msg_tx, &mut gtp);
+                    Katago::save_current_pos(&mut msg_tx, &mut gtp);
                 }
                 Cmd::GenMove(color) => {
                     let _ = match gtp.genmove_for(color) {
@@ -115,6 +125,7 @@ impl Katago {
                         Err(e) => msg_tx.send(Msg::Error(Error::from(e))),
                     };
                     Katago::send_state(&mut msg_tx, &mut gtp);
+                    Katago::save_current_pos(&mut msg_tx, &mut gtp);
                 }
             }
         }
