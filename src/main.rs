@@ -2,13 +2,11 @@ mod board;
 mod game;
 mod katago;
 mod listen;
+mod regime;
 mod speech;
 mod vision;
 
 use clap::{Parser, Subcommand};
-use std::str::FromStr;
-
-use crate::listen::VoiceCommandsSettings;
 
 #[derive(Parser)]
 #[command(version, about, long_about=None)]
@@ -44,215 +42,17 @@ enum Commands {
     Listen,
 }
 
-fn game() -> Result<()> {
-    let mut game = game::Game::new();
-    let mut katago = katago::Katago::new(katago::Settings::default())?;
-    let mut vision = vision::Vision::new(vision::Settings::default())?;
-    let mut speech = speech::Speech::new(speech::Settings::default());
-    let mut listen = listen::Listen::new(VoiceCommandsSettings::default());
-
-    vision.spawn();
-    katago.spawn();
-    listen.spawn();
-
-    loop {
-        let mut nothing_todo = true;
-        //обработка подсисетмы зрения
-        if let Some(msg) = vision.step() {
-            nothing_todo = false;
-            match msg {
-                vision::Msg::Board(brd) => game.on_human_update_board(brd),
-                vision::Msg::Error(e) => return Err(Error::from(e)),
-            }
-        }
-        // обработка подсистемы AI
-        if let Some(msg) = katago.step() {
-            nothing_todo = false;
-            match msg {
-                katago::Msg::State(state) => game.on_ai_state_update(state),
-                katago::Msg::Move(mv) => game.on_ai_move(mv),
-                katago::Msg::Error(e) => return Err(Error::from(e)),
-            }
-        }
-        if let Some(msg) = listen.step() {
-            nothing_todo = false;
-            match msg {
-                listen::Msg::Text(txt) => println!("Human say: {txt}"),
-                listen::Msg::Cmd(cmd) => game.on_voice_cmd(cmd),
-                listen::Msg::Err(e) => return Err(Error::from(e)),
-            }
-        }
-        // обработка подсистемы ведения игры
-        if let Some(msg) = game.step() {
-            nothing_todo = false;
-            match msg {
-                game::Msg::WrongStones(ws) => speech.say_for(&ws),
-                game::Msg::HumanPlay(color, mv) => {
-                    speech.say("Ага.");
-                    katago.play(color, mv);
-                }
-                game::Msg::NeedAiMove(cl) => katago.genmove_for(cl),
-                game::Msg::Speech(s) => speech.say(&s),
-                game::Msg::Error(e) => return Err(Error::from(e)),
-                game::Msg::GameFinished => {
-                    speech.say("Спасибо за игру.");
-                    break;
-                }
-            }
-        }
-
-        // обработка сообщений от подсистемы синтеза речи
-        if let Some(msg) = speech.step() {
-            match msg {
-                speech::Msg::Error(e) => return Err(Error::from(e)),
-            }
-        }
-
-        if nothing_todo {
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
-    }
-
-    loop {
-        println!("Game finished! Press Ctrl+C");
-        speech.step();
-        std::thread::sleep(std::time::Duration::from_secs(1));
-    }
-    //Ok(())
-}
-
-fn vision() -> Result<()> {
-    let mut vision = vision::Vision::new(vision::Settings::default())?;
-    vision.spawn();
-
-    loop {
-        if let Some(msg) = vision.step() {
-            match msg {
-                vision::Msg::Board(brd) => println!("{brd}"),
-                vision::Msg::Error(e) => return Err(Error::from(e)),
-            }
-        }
-
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
-}
-
-fn parse_board(photo: &str, dump_files: Option<bool>) -> Result<()> {
-    let is_dump_steps = dump_files.is_none_or(|v| v);
-    let settings = vision::Settings::default();
-    let board = vision::parse_board_from(photo, &settings, is_dump_steps)?;
-    match board {
-        Some(brd) => println!("{brd}"),
-        None => println!("Доска не найдена."),
-    }
-    Ok(())
-}
-
-fn vision_tests(tests_dir: &str) -> Result<()> {
-    let mut success_count = 0;
-    let mut failed_tests = Vec::new();
-
-    for entry in std::fs::read_dir(tests_dir)? {
-        let entry = entry?;
-        let entry_type = entry.file_type()?;
-
-        // проходимся только директориям
-        if entry_type.is_dir() {
-            // имя теста это имя директории
-            let name = format!("{}", entry.file_name().display());
-            println!("Test {}", name);
-
-            let settings = vision::Settings::default();
-            let photo_filename = format!("{}/photo.jpg", entry.path().as_os_str().display());
-            let board_from_vision = vision::parse_board_from(&photo_filename, &settings, false)?;
-            let board_filename = format!("{}/board.txt", entry.path().as_os_str().display());
-            let is_board_file_exists = std::fs::exists(&board_filename)?;
-
-            let test_success = match board_from_vision {
-                Some(vision_board) => {
-                    println!("VISION:\n{}", vision_board);
-                    if is_board_file_exists {
-                        let board_txt = std::fs::read_to_string(board_filename)?;
-                        let board = board::Board::from_str(&board_txt)?;
-                        println!("SOURCE BOARD:\n{}", board);
-                        let diff = board::diff(&board, &vision_board);
-                        if !diff.is_empty() {
-                            println!("DIFF: ");
-                            for d in &diff {
-                                println!("  {d}");
-                            }
-                        }
-                        diff.is_empty()
-                    } else {
-                        println!("SOURCE BOARD DO NOT EXISTS");
-                        false
-                    }
-                }
-                None => {
-                    println!("VISION: None");
-                    println!("Source board exists: {is_board_file_exists}");
-                    !is_board_file_exists
-                }
-            };
-
-            // подсчитывам количество пройденных и не пройденных тестов
-            if test_success {
-                success_count += 1;
-                println!("Test {} success.", name);
-            } else {
-                println!("Test {} FAILED!", name);
-                failed_tests.push(name);
-            }
-            println!("---------------------------------------------\n");
-        }
-    }
-    println!(
-        "All tests finished. {success_count} success, {} failed.",
-        failed_tests.len()
-    );
-    if !failed_tests.is_empty() {
-        println!("failed tests list:");
-        for name in failed_tests {
-            println!("  {name}");
-        }
-    }
-    Ok(())
-}
-
-fn listen_test() {
-    println!("Creating listen...");
-    let mut listen = listen::Listen::new(listen::VoiceCommandsSettings::default());
-    listen.spawn();
-    println!("Listen started. Press Ctrl+C for exit.");
-    loop {
-        match listen.step() {
-            Some(msg) => match msg {
-                listen::Msg::Text(txt) => println!("{txt}"),
-                listen::Msg::Err(e) => println!("Error {:?}", e),
-                listen::Msg::Cmd(cmd) => {
-                    println!("Voice Commnd: {:?}", cmd);
-                }
-            },
-            None => std::thread::sleep(std::time::Duration::from_millis(10)),
-        }
-    }
-}
-
 fn main() -> Result<()> {
     let cli = Cli::parse();
     if let Some(cmd) = cli.command {
         match cmd {
-            Commands::Camera => {
-                vision::camera_mode()?;
-                Ok(())
-            }
-
-            Commands::Vision => vision(),
+            Commands::Camera => regime::camera::exec(),
+            Commands::Vision => regime::check_vision::exec(),
 
             Commands::ParseBoard {
                 photo_filename,
                 dump_files,
-            } => parse_board(&photo_filename, dump_files),
+            } => regime::parse_board::exec(&photo_filename, dump_files),
 
             Commands::Calibrate { photo_dir, count } => {
                 vision::calibrate_by(&photo_dir, count)?;
@@ -264,13 +64,13 @@ fn main() -> Result<()> {
                 Ok(())
             }
 
-            Commands::VisionTests { tests_dir } => vision_tests(&tests_dir),
+            Commands::VisionTests { tests_dir } => regime::vision_tests::exec(&tests_dir),
 
-            Commands::Listen => Ok(listen_test()),
+            Commands::Listen => regime::check_listen::exec(),
         }
     } else {
         // по дефолту сразу переходиим к игре
-        let result = game();
+        let result = regime::human_vs_ai::exec();
         if let Err(e) = result {
             println!("Error: {:?}", e);
         }
@@ -280,7 +80,7 @@ fn main() -> Result<()> {
 
 #[allow(dead_code)]
 #[derive(Debug)]
-enum Error {
+pub enum Error {
     Katago(katago::Error),
     Speech(speech::Error),
     Vision(vision::Error),
