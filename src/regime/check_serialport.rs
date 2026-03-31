@@ -1,8 +1,9 @@
-use std::fmt::Display;
+use super::Error;
 
-use serialport::{self, SerialPort, SerialPortType};
+use serialport::{self, SerialPortType};
+use std::io;
 
-type Result = std::result::Result<(), serialport::Error>;
+type Result = std::result::Result<(), Error>;
 
 pub fn exec(portname: Option<String>) -> Result {
     match portname {
@@ -42,6 +43,19 @@ fn show_aviableports() -> Result {
     Ok(())
 }
 
-fn port_process(portname: String) -> Result {
-    todo!();
+fn port_process(portname: String) -> std::result::Result<(), Error> {
+    let mut port = serialport::new(portname, 9600).open()?;
+    println!("Port opened. type a commnd to port and wait for answer.");
+
+    loop {
+        let mut line = String::new();
+        io::stdin().read_line(&mut line)?;
+
+        if !line.is_empty() {
+            writeln!(&mut port, "{line}")?;
+
+            port.read_to_string(&mut line)?;
+            println!("{line}");
+        }
+    }
 }
