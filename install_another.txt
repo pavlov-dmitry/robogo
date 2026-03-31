@@ -5,3 +5,4 @@
 sudo apt-get install alsa-dev
 sudo apt-get install pulseaudio
 sudo apt-get install libssl-dev
+sudo apt-get install libudev-dev

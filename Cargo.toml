@@ -9,3 +9,4 @@ chrono = "*"
 clap = { version = "*", features = ["derive"] }
 cpal = "*"
 vosk = "*"
+serialport = "*"

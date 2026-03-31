@@ -7,6 +7,7 @@ mod speech;
 mod vision;
 
 use clap::{Parser, Subcommand};
+use serialport;
 
 #[derive(Parser)]
 #[command(version, about, long_about=None)]
@@ -40,6 +41,9 @@ enum Commands {
 
     /// Режим тестирования распознования голоса
     Listen,
+
+    /// Режим тестирования сериал-порта, если запустить без имени порта, то выдаст список досутпных с именами
+    Serial { portname: Option<String> },
 }
 
 fn main() -> Result<()> {
@@ -67,6 +71,11 @@ fn main() -> Result<()> {
             Commands::VisionTests { tests_dir } => regime::vision_tests::exec(&tests_dir),
 
             Commands::Listen => regime::check_listen::exec(),
+
+            Commands::Serial { portname } => {
+                regime::check_serialport::exec(portname)?;
+                Ok(())
+            }
         }
     } else {
         // по дефолту сразу переходиим к игре
@@ -88,6 +97,7 @@ pub enum Error {
     Game(game::Error),
     BoardParseError,
     Io(std::io::Error),
+    Serial(serialport::Error),
 }
 
 type Result<T> = std::result::Result<T, Error>;
@@ -125,5 +135,10 @@ impl From<std::io::Error> for Error {
 impl From<listen::Error> for Error {
     fn from(value: listen::Error) -> Self {
         Error::Listen(value)
+    }
+}
+impl From<serialport::Error> for Error {
+    fn from(value: serialport::Error) -> Self {
+        Error::Serial(value)
     }
 }

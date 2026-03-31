@@ -1,5 +1,6 @@
 pub mod camera;
 pub mod check_listen;
+pub mod check_serialport;
 pub mod check_vision;
 pub mod human_vs_ai;
 pub mod parse_board;

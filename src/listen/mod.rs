@@ -158,7 +158,7 @@ impl Listen {
         let device = host.default_input_device().expect("No input audio device");
         let config = cpal::StreamConfig {
             channels: 1,
-            sample_rate: cpal::SampleRate(16000),
+            sample_rate: 16000,
             buffer_size: cpal::BufferSize::Default,
         };
         let (tx, rx) = mpsc::channel::<Vec<i16>>();
