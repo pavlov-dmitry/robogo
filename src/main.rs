@@ -58,14 +58,10 @@ fn main() -> Result<()> {
                 dump_files,
             } => regime::parse_board::exec(&photo_filename, dump_files),
 
-            Commands::Calibrate { photo_dir, count } => {
-                vision::calibrate_by(&photo_dir, count)?;
-                Ok(())
-            }
+            Commands::Calibrate { photo_dir, count } => regime::calibrate::exec(photo_dir, count),
 
             Commands::TestCalibration { photo_filename } => {
-                vision::test_calibration(&photo_filename)?;
-                Ok(())
+                regime::test_calibration::exec(photo_filename)
             }
 
             Commands::VisionTests { tests_dir } => regime::vision_tests::exec(&tests_dir),

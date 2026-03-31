@@ -1,9 +1,11 @@
+pub mod calibrate;
 pub mod camera;
 pub mod check_listen;
 pub mod check_serialport;
 pub mod check_vision;
 pub mod human_vs_ai;
 pub mod parse_board;
+pub mod test_calibration;
 pub mod vision_tests;
 
 use super::Error;
