@@ -9,6 +9,7 @@ pub mod test_calibration;
 pub mod vision_tests;
 
 use super::Error;
+use super::arm;
 use super::board;
 use super::game;
 use super::katago;

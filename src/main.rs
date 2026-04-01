@@ -1,3 +1,4 @@
+mod arm;
 mod board;
 mod game;
 mod katago;
@@ -7,7 +8,6 @@ mod speech;
 mod vision;
 
 use clap::{Parser, Subcommand};
-use serialport;
 
 #[derive(Parser)]
 #[command(version, about, long_about=None)]
@@ -93,7 +93,8 @@ pub enum Error {
     Game(game::Error),
     BoardParseError,
     Io(std::io::Error),
-    Serial(serialport::Error),
+    ArduinoPort(arm::arduino_port::Error),
+    Arm(arm::Error),
 }
 
 type Result<T> = std::result::Result<T, Error>;
@@ -133,8 +134,13 @@ impl From<listen::Error> for Error {
         Error::Listen(value)
     }
 }
-impl From<serialport::Error> for Error {
-    fn from(value: serialport::Error) -> Self {
-        Error::Serial(value)
+impl From<arm::arduino_port::Error> for Error {
+    fn from(value: arm::arduino_port::Error) -> Self {
+        Error::ArduinoPort(value)
+    }
+}
+impl From<arm::Error> for Error {
+    fn from(value: arm::Error) -> Self {
+        Error::Arm(value)
     }
 }

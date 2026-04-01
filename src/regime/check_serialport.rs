@@ -1,7 +1,7 @@
 use super::Error;
+use super::arm::arduino_port::ArduinoPort;
 
 use serialport::{self, SerialPortType};
-use std::io;
 
 type Result = std::result::Result<(), Error>;
 
@@ -14,7 +14,7 @@ pub fn exec(portname: Option<String>) -> Result {
 
 fn show_aviableports() -> Result {
     println!("Aviable ports:");
-    let infos = serialport::available_ports()?;
+    let infos = ArduinoPort::available_ports()?;
     for info in infos {
         print!("name: {}", info.port_name);
         print!(" type: ");
@@ -43,19 +43,17 @@ fn show_aviableports() -> Result {
     Ok(())
 }
 
-fn port_process(portname: String) -> std::result::Result<(), Error> {
-    let mut port = serialport::new(portname, 9600).open()?;
+fn port_process(portname: String) -> Result {
+    let mut port = ArduinoPort::new(&portname, 20)?;
     println!("Port opened. type a commnd to port and wait for answer.");
 
     loop {
         let mut line = String::new();
-        io::stdin().read_line(&mut line)?;
+        std::io::stdin().read_line(&mut line)?;
 
         if !line.is_empty() {
-            writeln!(&mut port, "{line}")?;
-
-            port.read_to_string(&mut line)?;
-            println!("{line}");
+            let answer = port.send_cmd(&line)?;
+            println!("{answer}");
         }
     }
 }
