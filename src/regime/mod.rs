@@ -9,9 +9,10 @@ pub mod test_calibration;
 pub mod vision_tests;
 
 use super::Error;
+
 use super::arm;
 use super::board;
-use super::game;
+use super::human_vs_ai_game_control;
 use super::katago;
 use super::listen;
 use super::speech;

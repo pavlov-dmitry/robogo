@@ -1,6 +1,6 @@
 mod arm;
 mod board;
-mod game;
+mod human_vs_ai_game_control;
 mod katago;
 mod listen;
 mod regime;
@@ -96,7 +96,7 @@ pub enum Error {
     #[error("Ошибка работы со слухоч")]
     Listen(#[from] listen::Error),
     #[error("Ошибка в логике Человек против ИИ")]
-    Game(#[from] game::Error),
+    HumanVsAi(#[from] human_vs_ai_game_control::Error),
     #[error("Ошибка парсинга доски.")]
     BoardParseError(#[from] board::BoardParseError),
     #[error("Ошибка ввода-вывода")]

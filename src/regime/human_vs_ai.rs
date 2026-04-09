@@ -1,12 +1,12 @@
 use super::Error;
-use super::game;
+use super::human_vs_ai_game_control;
 use super::katago;
 use super::listen;
 use super::speech;
 use super::vision;
 
 pub fn exec() -> Result<(), Error> {
-    let mut game = game::Game::new();
+    let mut game = human_vs_ai_game_control::Game::new();
     let mut katago = katago::Katago::new(katago::Settings::default())?;
     let mut vision = vision::Vision::new(vision::Settings::default())?;
     let mut speech = speech::Speech::new(speech::Settings::default());
@@ -47,15 +47,15 @@ pub fn exec() -> Result<(), Error> {
         if let Some(msg) = game.step() {
             nothing_todo = false;
             match msg {
-                game::Msg::WrongStones(ws) => speech.say_for(&ws),
-                game::Msg::HumanPlay(color, mv) => {
+                human_vs_ai_game_control::Msg::WrongStones(ws) => speech.say_for(&ws),
+                human_vs_ai_game_control::Msg::HumanPlay(color, mv) => {
                     speech.say("Ага.");
                     katago.play(color, mv);
                 }
-                game::Msg::NeedAiMove(cl) => katago.genmove_for(cl),
-                game::Msg::Speech(s) => speech.say(&s),
-                game::Msg::Error(e) => return Err(Error::from(e)),
-                game::Msg::GameFinished => {
+                human_vs_ai_game_control::Msg::NeedAiMove(cl) => katago.genmove_for(cl),
+                human_vs_ai_game_control::Msg::Speech(s) => speech.say(&s),
+                human_vs_ai_game_control::Msg::Error(e) => return Err(Error::from(e)),
+                human_vs_ai_game_control::Msg::GameFinished => {
                     speech.say("Спасибо за игру.");
                     break;
                 }
