@@ -1,6 +1,7 @@
 use std::fmt;
 use std::fmt::Display;
 use std::str::FromStr;
+use thiserror::Error;
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum Color {
@@ -49,6 +50,8 @@ pub enum Move {
     Resign,
 }
 
+#[derive(Error, Debug)]
+#[error("ошибка парсинга позиции на доске")]
 pub struct ParsePositionError;
 
 static Y_LETTERS: &str = "ABCDEFGHJKLMNOPQRST";
@@ -228,6 +231,8 @@ impl Display for Action {
     }
 }
 
+#[derive(Error, Debug)]
+#[error("Ошибка парсинга текстового представления поля")]
 pub struct BoardParseError;
 
 impl FromStr for Board {

@@ -10,3 +10,4 @@ clap = { version = "*", features = ["derive"] }
 cpal = "*"
 vosk = "*"
 serialport = "*"
+thiserror = "2"

@@ -1,12 +1,9 @@
 pub mod arduino_port;
 
-#[derive(Debug)]
-pub enum Error {
-    ArduinoPort(arduino_port::Error),
-}
+use thiserror::Error;
 
-impl From<arduino_port::Error> for Error {
-    fn from(value: arduino_port::Error) -> Self {
-        Error::ArduinoPort(value)
-    }
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Ошибка обмена с Arduino")]
+    ArduinoPort(#[from] arduino_port::Error),
 }

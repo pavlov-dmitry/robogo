@@ -1,6 +1,7 @@
 use std::collections::LinkedList;
 use std::io;
 use std::process::{self, Command};
+use thiserror::Error;
 
 pub trait ToSpeech {
     fn to_speech(&self) -> String;
@@ -19,16 +20,12 @@ impl Settings {
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum Error {
-    Io(io::Error),
+    #[error("Ошибка вводв выводв")]
+    Io(#[from] io::Error),
 }
 
-impl From<io::Error> for Error {
-    fn from(value: io::Error) -> Self {
-        Error::Io(value)
-    }
-}
 pub enum Msg {
     Error(Error),
 }

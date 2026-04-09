@@ -3,24 +3,21 @@ mod parse;
 
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread::JoinHandle;
+use thiserror::Error;
 
 use super::board::{self, Color, Move};
 use gtp::Gtp;
 pub use gtp::{Settings, State};
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum Error {
-    Gtp(gtp::Error),
-    Disconnected,
+    #[error("Ошибка обмена по протоколу GTP")]
+    Gtp(#[from] gtp::Error),
+    #[error("Отвалился поток работы с Katago.")]
+    ThreadDisconnected,
 }
 pub type Result<T> = std::result::Result<T, Error>;
-
-impl From<gtp::Error> for Error {
-    fn from(value: gtp::Error) -> Self {
-        Error::Gtp(value)
-    }
-}
 
 enum Cmd {
     Play(Color, board::Move),
@@ -78,7 +75,7 @@ impl Katago {
             match rx.try_recv() {
                 Ok(msg) => Some(msg),
                 Err(e) => match e {
-                    TryRecvError::Disconnected => Some(Msg::Error(Error::Disconnected)),
+                    TryRecvError::Disconnected => Some(Msg::Error(Error::ThreadDisconnected)),
                     TryRecvError::Empty => None,
                 },
             }

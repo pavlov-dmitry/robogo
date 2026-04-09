@@ -177,11 +177,14 @@ pub fn warp_board_by_border(settings: &Settings, border: &Polygon, img: &Mat) ->
         .iter()
         .map(|p| Point2f::new(p.x as f32, p.y as f32))
         .collect();
+
     let (sum_x, sum_y) = poly_f
         .iter()
         .fold((0., 0.), |(sx, sy), p| (sx + p.x, sy + p.y));
+
     let mean_x = sum_x / border.len() as f32;
     let mean_y = sum_y / border.len() as f32;
+
     let dst_poly: Vector<Point2f> = poly_f
         .iter()
         .map(|p| {
@@ -201,6 +204,7 @@ pub fn warp_board_by_border(settings: &Settings, border: &Polygon, img: &Mat) ->
 
     let transform_matrix = imgproc::get_perspective_transform(&poly_f, &dst_poly, core::DECOMP_LU)?;
     let mut warped = Mat::default();
+
     imgproc::warp_perspective(
         &img,
         &mut warped,

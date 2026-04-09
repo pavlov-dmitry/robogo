@@ -1,6 +1,6 @@
 use serialport::{self, SerialPort, SerialPortInfo};
-
 use std::io::{BufRead, BufReader, BufWriter, Write};
+use thiserror::Error;
 
 type SerialPortPtr = Box<dyn SerialPort>;
 
@@ -9,10 +9,12 @@ pub struct ArduinoPort {
     writer: BufWriter<SerialPortPtr>,
 }
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum Error {
-    Serial(serialport::Error),
-    Io(std::io::Error),
+    #[error("Ошибка обмена по сериал порту")]
+    Serial(#[from] serialport::Error),
+    #[error("Ошибка обмена ввода вывода")]
+    Io(#[from] std::io::Error),
 }
 
 type Result<T> = std::result::Result<T, Error>;
@@ -50,17 +52,5 @@ impl ArduinoPort {
             }
         }
         Ok(answer)
-    }
-}
-
-impl From<serialport::Error> for Error {
-    fn from(value: serialport::Error) -> Self {
-        Error::Serial(value)
-    }
-}
-
-impl From<std::io::Error> for Error {
-    fn from(value: std::io::Error) -> Self {
-        Error::Io(value)
     }
 }

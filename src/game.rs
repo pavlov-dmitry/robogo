@@ -6,6 +6,7 @@ use super::speech::ToSpeech;
 
 use std::collections::LinkedList;
 use std::fmt::Display;
+use thiserror::Error;
 
 #[derive(Default)]
 pub struct WrongStones {
@@ -22,8 +23,9 @@ pub enum Msg {
     GameFinished,
 }
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum Error {
+    #[error("Неожиданное обновление состояния ИИ")]
     UnpredictableAiState,
 }
 

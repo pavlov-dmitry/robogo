@@ -8,6 +8,7 @@ mod speech;
 mod vision;
 
 use clap::{Parser, Subcommand};
+use thiserror::Error;
 
 #[derive(Parser)]
 #[command(version, about, long_about=None)]
@@ -84,63 +85,26 @@ fn main() -> Result<()> {
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum Error {
-    Katago(katago::Error),
-    Speech(speech::Error),
-    Vision(vision::Error),
-    Listen(listen::Error),
-    Game(game::Error),
-    BoardParseError,
-    Io(std::io::Error),
-    ArduinoPort(arm::arduino_port::Error),
-    Arm(arm::Error),
+    #[error("Ошибка работы с Katago.")]
+    Katago(#[from] katago::Error),
+    #[error("Ошибка работы с речью")]
+    Speech(#[from] speech::Error),
+    #[error("Ошибка работы со зрением")]
+    Vision(#[from] vision::Error),
+    #[error("Ошибка работы со слухоч")]
+    Listen(#[from] listen::Error),
+    #[error("Ошибка в логике Человек против ИИ")]
+    Game(#[from] game::Error),
+    #[error("Ошибка парсинга доски.")]
+    BoardParseError(#[from] board::BoardParseError),
+    #[error("Ошибка ввода-вывода")]
+    Io(#[from] std::io::Error),
+    #[error("Ошибка обмена с Arduino")]
+    ArduinoPort(#[from] arm::arduino_port::Error),
+    #[error("Ошибка обмена с рукой")]
+    Arm(#[from] arm::Error),
 }
 
 type Result<T> = std::result::Result<T, Error>;
-
-impl From<katago::Error> for Error {
-    fn from(value: katago::Error) -> Self {
-        Error::Katago(value)
-    }
-}
-impl From<speech::Error> for Error {
-    fn from(value: speech::Error) -> Self {
-        Error::Speech(value)
-    }
-}
-impl From<vision::Error> for Error {
-    fn from(value: vision::Error) -> Self {
-        Error::Vision(value)
-    }
-}
-impl From<game::Error> for Error {
-    fn from(value: game::Error) -> Self {
-        Error::Game(value)
-    }
-}
-impl From<board::BoardParseError> for Error {
-    fn from(_: board::BoardParseError) -> Self {
-        Error::BoardParseError
-    }
-}
-impl From<std::io::Error> for Error {
-    fn from(value: std::io::Error) -> Self {
-        Error::Io(value)
-    }
-}
-impl From<listen::Error> for Error {
-    fn from(value: listen::Error) -> Self {
-        Error::Listen(value)
-    }
-}
-impl From<arm::arduino_port::Error> for Error {
-    fn from(value: arm::arduino_port::Error) -> Self {
-        Error::ArduinoPort(value)
-    }
-}
-impl From<arm::Error> for Error {
-    fn from(value: arm::Error) -> Self {
-        Error::Arm(value)
-    }
-}

@@ -8,6 +8,7 @@ use std::{
     num::ParseIntError,
     process::{Command, Stdio},
 };
+use thiserror::Error;
 
 pub struct Settings {
     dir: String,
@@ -32,31 +33,18 @@ impl Settings {
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum Error {
-    Io(io::Error),
+    #[error("Ошибка ввода вывода")]
+    Io(#[from] io::Error),
+    #[error("Ошибка в текстовом протоколе обмена с Katago, возможно несоответствие версий.")]
     InvalidTextProtocol,
-    ParseIntError,
-    ParsePositionError,
+    #[error("Ошибка парсинга числа")]
+    ParseIntError(#[from] ParseIntError),
+    #[error("Ошибка парсинга позиции")]
+    ParsePositionError(#[from] ParsePositionError),
+    #[error("Неизвестная ошибка: {0}")]
     UnknownError(String),
-}
-
-impl From<io::Error> for Error {
-    fn from(e: io::Error) -> Error {
-        Error::Io(e)
-    }
-}
-
-impl From<ParseIntError> for Error {
-    fn from(_: ParseIntError) -> Self {
-        Error::ParseIntError
-    }
-}
-
-impl From<ParsePositionError> for Error {
-    fn from(_: ParsePositionError) -> Self {
-        Error::ParsePositionError
-    }
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

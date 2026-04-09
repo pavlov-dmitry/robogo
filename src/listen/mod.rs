@@ -3,6 +3,7 @@ use std::{
     sync::mpsc::{self, Receiver, Sender, TryRecvError},
     thread::JoinHandle,
 };
+use thiserror::Error;
 use vosk;
 
 type CmdParserPtr = Box<dyn CmdParser>;
@@ -14,8 +15,9 @@ pub struct Listen {
     voice_settings: VoiceCommandsSettings,
 }
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum Error {
+    #[error("Потом аварийно завершился")]
     ThreadDisconnected,
 }
 

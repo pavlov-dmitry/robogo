@@ -4,6 +4,7 @@ use chrono::Local;
 use std::string::String;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread::JoinHandle;
+use thiserror::Error;
 
 use super::board::{self, Board, Cell, Pos, has_diff};
 
@@ -45,18 +46,16 @@ pub enum Msg {
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum Error {
-    ProcError(proc::Error),
+    #[error("Ошибка обработки кадра")]
+    ProcError(#[from] proc::Error),
+    #[error("Ошибка подключения к камере")]
     CameraNotOpened,
+    #[error("Ошибка настройки камеры")]
     CameraSetParamsError,
-    Disconnected,
-}
-
-impl From<proc::Error> for Error {
-    fn from(value: proc::Error) -> Self {
-        Error::ProcError(value)
-    }
+    #[error("Поток работы с камерой аварийно завершил свою работу")]
+    ThreadDisconnected,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -207,7 +206,7 @@ impl Vision {
                     VisionMsg::Error(e) => Some(Msg::Error(Error::from(e))),
                 },
                 Err(e) => match e {
-                    TryRecvError::Disconnected => Some(Msg::Error(Error::Disconnected)),
+                    TryRecvError::Disconnected => Some(Msg::Error(Error::ThreadDisconnected)),
                     TryRecvError::Empty => None,
                 },
             }

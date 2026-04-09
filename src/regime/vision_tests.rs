@@ -27,9 +27,11 @@ pub fn exec(tests_dir: &str) -> Result<(), Error> {
             let test_success = match board_from_vision {
                 Some(vision_board) => {
                     println!("VISION:\n{}", vision_board);
+
                     if is_board_file_exists {
                         let board_txt = std::fs::read_to_string(board_filename)?;
                         let board = board::Board::from_str(&board_txt)?;
+
                         println!("SOURCE BOARD:\n{}", board);
                         let diff = board::diff(&board, &vision_board);
                         if !diff.is_empty() {
