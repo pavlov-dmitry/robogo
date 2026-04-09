@@ -40,7 +40,15 @@ impl ArduinoPort {
         self.writer.flush()?;
 
         let mut answer = String::new();
-        self.reader.read_line(&mut answer)?;
+        loop {
+            let mut line = String::new();
+            self.reader.read_line(&mut line)?;
+            if line.trim() == "done" {
+                break;
+            } else {
+                answer.push_str(&line);
+            }
+        }
         Ok(answer)
     }
 }
