@@ -1,19 +1,12 @@
 use super::Error;
 use super::arm::arduino_port::ArduinoPort;
 use super::arm::arm_positioner::{ArmPositioner, Motor, MotorsState};
-use easy_repl::{CommandStatus, Repl, command, repl::ReplBuilder};
-
-use std::cell::RefCell;
-use std::rc::Rc;
+use clap::Parser;
+use clap_repl::ClapEditor;
 
 use serialport::{self, SerialPortType};
 
 type Result = std::result::Result<(), Error>;
-
-#[derive(Default)]
-struct RegimeState {
-    points: Vec<MotorsState>,
-}
 
 pub fn exec(portname: Option<String>) -> Result {
     match portname {
@@ -53,204 +46,193 @@ fn show_aviableports() -> Result {
     Ok(())
 }
 
-fn port_process(portname: String) -> Result {
-    let arm = ArmPositioner::new(&portname, 20)?;
-    let arm_ptr = Rc::new(RefCell::new(arm));
+#[derive(Debug, Parser)]
+#[command(name = "")] // делает вывод ошибки более корректным
+enum CheckArmCommand {
+    /// Переместить мотор X на заданнаое количество шагов
+    X { steps: u32 },
 
-    let regime = RegimeState::default();
-    let regime_ptr = Rc::new(RefCell::new(regime));
+    /// Переместить мотор X на заданнаое количество шагов в обратную сторону
+    Xr { steps: u32 },
 
-    let repl_builder = create_commands(Repl::builder(), arm_ptr.clone(), regime_ptr.clone());
+    /// Задать мотору X стартовую скорость
+    Xss { speed: u32 },
 
-    let mut repl = repl_builder.build().expect("failed to build Repl");
-    println!("Порт открыт. Команда 'help' покажет все возможные команды.");
-    repl.run().expect("Critival REPL error");
-    Ok(())
+    /// Задать мотору X максимальную скорость
+    Xms { speed: u32 },
+
+    /// Задать мотору X ускорение
+    Xa { acceleration: u32 },
+
+    /// Переместить мотор Y на заданнаое количество шагов
+    Y { steps: u32 },
+
+    /// Переместить мотор Y на заданнаое количество шагов в обратную сторону
+    Yr { steps: u32 },
+
+    /// Задать мотору Y стартовую скорость
+    Yss { speed: u32 },
+
+    /// Задать мотору Y максимальную скорость
+    Yms { speed: u32 },
+
+    /// Задать мотору Y ускорение
+    Ya { acceleration: u32 },
+
+    /// Переместить мотор Z на заданнаое количество шагов
+    Z { steps: u32 },
+
+    /// Переместить мотор Z на заданнаое количество шагов в обратную сторону
+    Zr { steps: u32 },
+
+    /// Задать мотору Z стартовую скорость
+    Zss { speed: u32 },
+
+    /// Задать мотору Z максимальную скорость
+    Zms { speed: u32 },
+
+    /// Задать мотору Z ускорение
+    Za { acceleration: u32 },
+
+    /// Узнать текущее положение моторов
+    State,
+
+    /// Сохранить текущее положение в список точек
+    Save,
+
+    /// Показать список сохранённых точек
+    List,
+
+    /// Удалить точку из списка сохранённых
+    Remove { idx: usize },
+
+    /// Переместиться в сохранённую точку
+    Move { idx: usize },
+
+    /// Пройтись по всем точкам n раз по кругу
+    Loop { n: usize },
+
+    /// Выйти
+    Quit,
 }
 
-fn create_commands(
-    repl: ReplBuilder,
-    arm_ptr: Rc<RefCell<ArmPositioner>>,
-    regime_ptr: Rc<RefCell<RegimeState>>,
-) -> ReplBuilder {
-    let repl = create_standart_motor_moves_and_speed_commands(&Motor::X, repl, arm_ptr.clone());
-    let repl = create_standart_motor_moves_and_speed_commands(&Motor::Y, repl, arm_ptr.clone());
-    let repl = create_standart_motor_moves_and_speed_commands(&Motor::Z, repl, arm_ptr.clone());
+fn port_process(portname: String) -> Result {
+    let mut arm = ArmPositioner::new(&portname, 20)?;
+    let mut points = Vec::<MotorsState>::new();
 
-    let arm = arm_ptr.clone();
-    let repl = repl.add(
-        "state",
-        command! {
-            "Выводит текущую позицию всех моторов",
-            () => || {
-                let arm = arm.borrow();
-                let motors_state = arm.get_motors_state();
-                println!("{}", &to_string(&motors_state));
-                Ok(CommandStatus::Done)
+    let repl = ClapEditor::<CheckArmCommand>::builder().build();
+
+    println!("Порт подключен, можно вводить команды. help для списка комманд");
+    repl.repl(|cmd| {
+        let answer = match cmd {
+            // базовые команды мотора X
+            CheckArmCommand::X { steps } => arm.move_steps(&Motor::X, steps as i32).apply(),
+            CheckArmCommand::Xr { steps } => arm.move_steps(&Motor::X, steps as i32 * -1).apply(),
+            CheckArmCommand::Xss { speed } => arm.set_start_speed(&Motor::X, speed).apply(),
+            CheckArmCommand::Xms { speed } => arm.set_max_speed(&Motor::X, speed).apply(),
+            CheckArmCommand::Xa { acceleration } => {
+                arm.set_acceleration(&Motor::X, acceleration).apply()
             }
-        },
-    );
 
-    let arm = arm_ptr.clone();
-    let regime = regime_ptr.clone();
-    let repl = repl.add(
-        "save",
-        command! {
-            "Сохраняет текущее положение моторов как одну из точек для повторений позиций",
-            () => || {
-                let arm = arm.borrow();
-                let motors_state = arm.get_motors_state();
-                let mut regime = regime.borrow_mut();
-                regime.points.push(motors_state);
-                println!("Сохранено в позицию {}", regime.points.len() - 1);
-                Ok(CommandStatus::Done)
+            // базовые команды мотора Y
+            CheckArmCommand::Y { steps } => arm.move_steps(&Motor::Y, steps as i32).apply(),
+            CheckArmCommand::Yr { steps } => arm.move_steps(&Motor::Y, steps as i32 * -1).apply(),
+            CheckArmCommand::Yss { speed } => arm.set_start_speed(&Motor::Y, speed).apply(),
+            CheckArmCommand::Yms { speed } => arm.set_max_speed(&Motor::Y, speed).apply(),
+            CheckArmCommand::Ya { acceleration } => {
+                arm.set_acceleration(&Motor::Y, acceleration).apply()
             }
-        },
-    );
 
-    let regime = regime_ptr.clone();
-    let repl = repl.add(
-        "list",
-        command! {
-            "Выводит список соранённых точек",
-            () => || {
-                let mut regime = regime.borrow_mut();
-                if regime.points.is_empty() {
-                    println!("Cписок точек пуст.");
+            // базовые команды мотора Z
+            CheckArmCommand::Z { steps } => arm.move_steps(&Motor::Z, steps as i32).apply(),
+            CheckArmCommand::Zr { steps } => arm.move_steps(&Motor::Z, steps as i32 * -1).apply(),
+            CheckArmCommand::Zss { speed } => arm.set_start_speed(&Motor::Z, speed).apply(),
+            CheckArmCommand::Zms { speed } => arm.set_max_speed(&Motor::Z, speed).apply(),
+            CheckArmCommand::Za { acceleration } => {
+                arm.set_acceleration(&Motor::Z, acceleration).apply()
+            }
+
+            // команды работы со списком запомннных точек
+            CheckArmCommand::State => {
+                println!("{}", &to_string(&arm.get_motors_state()));
+                Ok(())
+            }
+
+            CheckArmCommand::Save => {
+                let pnt = arm.get_motors_state();
+                points.push(pnt);
+                println!("Положение сохранени под индексом {}", points.len());
+                Ok(())
+            }
+
+            CheckArmCommand::List => {
+                for (idx, pnt) in points.iter().enumerate() {
+                    println!("{}: {}", idx + 1, &to_string(&pnt));
                 }
-                else {
-                    for (idx, pnt) in regime.points.iter().enumerate() {
-                        println!("{}: {}", idx + 1, to_string(pnt));
+                Ok(())
+            }
+
+            CheckArmCommand::Remove { idx } => {
+                let idx = idx - 1;
+                if idx < points.len() {
+                    points.remove(idx);
+                    println!("Удалена");
+                } else {
+                    println!("Неверный индекс.")
+                }
+                Ok(())
+            }
+
+            CheckArmCommand::Move { idx } => {
+                let idx = idx - 1;
+                match points.get(idx) {
+                    Some(pnt) => arm
+                        .move_to(&Motor::X, pnt.x.pos)
+                        .move_to(&Motor::Y, pnt.y.pos)
+                        .move_to(&Motor::Z, pnt.z.pos)
+                        .apply(),
+                    None => {
+                        println!("Неверный индекс точки");
+                        Ok(())
                     }
                 }
-                Ok(CommandStatus::Done)
             }
-        },
-    );
 
-    let regime = regime_ptr.clone();
-    let repl = repl.add(
-        "remove",
-        command! {
-            "Удаляет точку из списка созранённых точек",
-            (idx: usize) => |idx| {
-                let idx = idx - 1;
-                let mut regime = regime.borrow_mut();
-                if idx < regime.points.len() {
-                    regime.points.remove(idx);
-                    println!("Удалена точка с индексом {idx}");
-                }
-                else {
-                    println!("Некорректный индекс точки.");
-                }
-                Ok(CommandStatus::Done)
-            }
-        },
-    );
-
-    let regime = regime_ptr.clone();
-    let arm = arm_ptr.clone();
-    let repl = repl.add(
-        "loop",
-        command! {
-            "N раз переместиться по всем созранённым точкам по кругу",
-            (n: usize) => |n| {
-                let regime = regime.borrow();
-                if regime.points.is_empty() {
-                    println!("Список точек пуст.");
-                    return Ok(CommandStatus::Done);
-                }
-                let mut arm = arm.borrow_mut();
-                for i in 0..n {
-                    println!("Цикл {}/{n}", i + 1);
-                    for (idx, pnt) in regime.points.iter().enumerate() {
-                        arm.move_to(&Motor::X, pnt.x.pos)
+            CheckArmCommand::Loop { n } => {
+                let mut result = Ok(());
+                'all: for circle_idx in 0..n {
+                    println!("Цыкл {}", circle_idx + 1);
+                    for (idx, pnt) in points.iter().enumerate() {
+                        println!("Иду к точке {}", idx + 1);
+                        let answer = arm
+                            .move_to(&Motor::X, pnt.x.pos)
                             .move_to(&Motor::Y, pnt.y.pos)
                             .move_to(&Motor::Z, pnt.z.pos)
-                            .apply()?;
-                        println!("Пришёл в точку {}", idx + 1);
+                            .apply();
+                        if let Err(e) = answer {
+                            result = Err(e);
+                            break 'all;
+                        }
                     }
                 }
-                println!("Завершено!");
-                Ok(CommandStatus::Done)
+                println!("Клнец циклов");
+                result
             }
-        },
-    );
 
-    repl
-}
-
-fn create_standart_motor_moves_and_speed_commands<'a>(
-    motor: &'a Motor,
-    repl: ReplBuilder<'a>,
-    arm_ptr: Rc<RefCell<ArmPositioner>>,
-) -> ReplBuilder<'a> {
-    let arm = arm_ptr.clone();
-    let repl = repl.add(
-        &format!("{motor}"),
-        command! {
-            &format!("Сделать мотором \'{motor}\' какое-то количество шагов(если отрицательное то в обратную сторону)"),
-            (steps: i32) => |steps| {
-                let mut arm_ptr = arm.borrow_mut();
-                arm_ptr.move_steps(motor, steps).apply()?;
-                Ok(CommandStatus::Done)
+            CheckArmCommand::Quit => {
+                std::process::exit(0);
             }
-        },
-    );
-
-    let arm = arm_ptr.clone();
-    let repl = repl.add(
-        &format!("{motor}mv"),
-        command! {
-            &format!("Переместить мотор \'{motor}\' в определённую глобальную позицию"),
-            (pos: i32) => |pos| {
-                let mut arm_ptr = arm.borrow_mut();
-                arm_ptr.move_to(motor, pos).apply()?;
-                Ok(CommandStatus::Done)
+        };
+        match answer {
+            Ok(()) => {}
+            Err(e) => {
+                println!("Произошла ошибка: {e}");
+                std::process::exit(1);
             }
-        },
-    );
+        }
+    });
 
-    let arm = arm_ptr.clone();
-    let repl = repl.add(
-        &format!("ss{motor}"),
-        command! {
-            &format!("Задать стартовую скорость мотору \'{motor}\'"),
-            (speed: u32) => |speed| {
-                let mut arm_ptr = arm.borrow_mut();
-                arm_ptr.set_start_speed(motor, speed).apply()?;
-                Ok(CommandStatus::Done)
-            }
-        },
-    );
-
-    let arm = arm_ptr.clone();
-    let repl = repl.add(
-        &format!("ms{motor}"),
-        command! {
-            &format!("Задать максимальную скорость мотору \'{motor}\'"),
-            (speed: u32) => |speed| {
-                let mut arm_ptr = arm.borrow_mut();
-                arm_ptr.set_max_speed(motor, speed).apply()?;
-                Ok(CommandStatus::Done)
-            }
-        },
-    );
-
-    let arm = arm_ptr.clone();
-    let repl = repl.add(
-        &format!("a{motor}"),
-        command! {
-            &format!("Задать ускорение мотору '{motor}\'"),
-            (acceleration: u32) => |acceleration| {
-                let mut arm_ptr = arm.borrow_mut();
-                arm_ptr.set_acceleration(motor, acceleration).apply()?;
-                Ok(CommandStatus::Done)
-            }
-        },
-    );
-
-    repl
+    Ok(())
 }
 
 fn to_string(motors_state: &MotorsState) -> String {

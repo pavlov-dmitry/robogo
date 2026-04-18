@@ -86,7 +86,8 @@ impl ArmPositioner {
     }
 
     pub fn apply(&mut self) -> Result<()> {
-        self.arduino_port.send_cmd(&self.current_cmd.to_string())?;
+        let cmd_str = self.current_cmd.to_string();
+        self.arduino_port.send_cmd(&cmd_str)?;
         self.current_cmd = MoveCmd::default();
         self.motors_state = self.next_motor_state.clone();
         Ok(())

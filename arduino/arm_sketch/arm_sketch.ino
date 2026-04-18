@@ -160,6 +160,7 @@ void parseMotorSubCmd(String subcmd, MotorCmd &motorCmd) {
   }
   else if (subcmd.startsWith("a")) {
     auto value = subcmd.substring(1).toInt();
+    motorCmd.acceleration = value;
   }
   else {
     auto value = subcmd.toInt();\
