@@ -43,8 +43,8 @@ enum Commands {
     /// Режим тестирования распознования голоса
     Listen,
 
-    /// Режим тестирования сериал-порта, если запустить без имени порта, то выдаст список досутпных с именами
-    Serial { portname: Option<String> },
+    /// Режим тестирования руки по сериал-порту, если запустить без имени порта, то выдаст список досутпных с их именами
+    Arm { portname: Option<String> },
 }
 
 fn main() -> Result<()> {
@@ -69,8 +69,8 @@ fn main() -> Result<()> {
 
             Commands::Listen => regime::check_listen::exec(),
 
-            Commands::Serial { portname } => {
-                regime::check_serialport::exec(portname)?;
+            Commands::Arm { portname } => {
+                regime::check_arm::exec(portname)?;
                 Ok(())
             }
         }

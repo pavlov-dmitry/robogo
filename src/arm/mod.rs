@@ -1,4 +1,5 @@
 pub mod arduino_port;
+pub mod arm_positioner;
 
 use thiserror::Error;
 

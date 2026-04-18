@@ -17,7 +17,7 @@ pub enum Error {
     Io(#[from] std::io::Error),
 }
 
-type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, Error>;
 
 impl ArduinoPort {
     pub fn new(portname: &str, timeout_secs: u64) -> Result<ArduinoPort> {
