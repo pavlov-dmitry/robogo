@@ -158,9 +158,9 @@ impl ToString for MoveCmd {
 impl Display for Motor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Motor::X => write!(f, "x"),
-            Motor::Y => write!(f, "y"),
-            Motor::Z => write!(f, "z"),
+            Motor::X => write!(f, "X"),
+            Motor::Y => write!(f, "Y"),
+            Motor::Z => write!(f, "Z"),
         }
     }
 }

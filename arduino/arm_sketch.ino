@@ -1,9 +1,8 @@
 #include <AccelStepper.h>
+#include <limits.h>
 
 // инкриментируется при изменении уже существующих комманд
-const uint16_t MAJOR_VERSION = 0;
-// инкриментируется при добавлении новых
-const uint16_t MINOR_VERSION = 1;
+const uint16_t VERSION = 1;
 
 const uint16_t MAX_SPEED_INTERVAL = 20000;
 const uint16_t MIN_SPEED_INTERVAL = 1000;
@@ -15,17 +14,21 @@ AccelStepper motor_z(AccelStepper::DRIVER, 4, 7);
 
 bool g_isMoveNow = false;
 
+const auto INVALID_VALUE = INT_MAX;
+
+struct MotorCmd
+{
+  int steps = INVALID_VALUE;
+  int start_speed = INVALID_VALUE;
+  int max_speed = INVALID_VALUE;
+  int acceleration = INVALID_VALUE;
+};
+
 struct MoveCmd
 {
-  int x = 0;
-  int y = 0;
-  int z = 0;
-  int s = 0;
-  int a = 0;
-    
-  bool is_empty() {
-    return x ==0 && y == 0 && z == 0 && s == 0 && a == 0;
-  }
+  MotorCmd x;
+  MotorCmd y;
+  MotorCmd z;
 };
 
 const size_t MOTORS_COUNT = 3;
@@ -34,6 +37,11 @@ const uint8_t ENABLE_PIN = 8;
 const int X_MOTOR_IDX = 0; 
 const int Y_MOTOR_IDX = 1;
 const int Z_MOTOR_IDX = 2;
+
+//предобьявления для компилятора
+void parseMoveSubCmd(String subcmd, MoveCmd &moveCmd);
+void parseMotorSubCmd(String subcmd, MotorCmd &motorCmd);
+void applyCmdTo(AccelStepper &motor, const MotorCmd& cmd);
 
 void setup() {
   Serial.begin(9600);
@@ -76,48 +84,34 @@ void processCommand(String command) {
   }
   else {
     auto cmd = parseMoveCmd(command);
-    if (!cmd.is_empty()) {
-      if (cmd.s != 0) {
-        //g_cruiseSpeed = constrain(cmd.s, MIN_SPEED_INTERVAL, MAX_SPEED_INTERVAL);
-        Serial.print("speed: "); Serial.println(cmd.s);
-        motor_x.setMaxSpeed(cmd.s);
-        motor_y.setMaxSpeed(cmd.s);
-        motor_z.setMaxSpeed(cmd.s);
-        
-      }
-      if (cmd.a != 0) {
-        Serial.print("accel: "); Serial.println(cmd.a);
-        motor_x.setAcceleration(cmd.a);
-        motor_y.setAcceleration(cmd.a);        
-        motor_z.setAcceleration(cmd.a);
-      }
-      if (cmd.x != 0) {
-        Serial.print("x: "); Serial.println(cmd.x);
-        motor_x.move(cmd.x);
-      }
-      if (cmd.y != 0) {
-        Serial.print("y: "); Serial.println(cmd.y);
-        motor_y.move(cmd.y);
-
-      }
-      if (cmd.z != 0) {
-        Serial.print("z: "); Serial.println(cmd.x);
-        motor_z.move(cmd.z);
-      }
-      g_isMoveNow = true;
-    }
+    applyCmdTo(motor_x, cmd.x);
+    applyCmdTo(motor_y, cmd.y);
+    applyCmdTo(motor_z, cmd.z);
+    g_isMoveNow = true;
   }
 }
 
 void processHi() {
     Serial.print("version: ");
-    Serial.print(MAJOR_VERSION);
-    Serial.print(".");
-    Serial.println(MINOR_VERSION);
+    Serial.println(VERSION);
     Serial.println("done");
 }
 
-void parseMoveSubCmd(String subcmd, MoveCmd &moveCmd);
+void applyCmdTo(AccelStepper &motor, const MotorCmd& cmd)
+{
+  if (cmd.start_speed != INVALID_VALUE) {
+    motor.setSpeed(cmd.start_speed);
+  }
+  if (cmd.max_speed != INVALID_VALUE) {
+    motor.setMaxSpeed(cmd.max_speed);
+  }
+  if (cmd.acceleration != INVALID_VALUE) {
+    motor.setAcceleration(cmd.acceleration);
+  }
+  if (cmd.steps != INVALID_VALUE) {
+    motor.move(cmd.steps);
+  }
+}
 
 MoveCmd parseMoveCmd(String cmd) {
   cmd += " ";
@@ -142,22 +136,33 @@ MoveCmd parseMoveCmd(String cmd) {
 
 void parseMoveSubCmd(String subcmd, MoveCmd &moveCmd) {
   char type = subcmd.charAt(0);
-  int16_t value = subcmd.substring(1).toInt();
+  auto motorSubCmd = subcmd.substring(1);
 
-  // скорость
-  if ('s' == type) {
-    moveCmd.s = value;;
-  }
-  else if ('x' == type) {
-    moveCmd.x = value;
+  if('x' == type) {
+    parseMotorSubCmd(motorSubCmd, moveCmd.x);
   }
   else if ('y' == type) {
-    moveCmd.y = value;
+    parseMotorSubCmd(motorSubCmd, moveCmd.y);
   }
   else if ('z' == type) {
-    moveCmd.z = value;
+    parseMotorSubCmd(motorSubCmd, moveCmd.z);
   }
-  else if ('a' == type) {
-    moveCmd.a = value;
+}
+
+void parseMotorSubCmd(String subcmd, MotorCmd &motorCmd) {
+  if(subcmd.startsWith("ss")) {
+    auto value = subcmd.substring(2).toInt();
+    motorCmd.start_speed = value;
+  }
+  else if (subcmd.startsWith("ms")) {
+    auto value = subcmd.substring(2).toInt();
+    motorCmd.max_speed = value;
+  }
+  else if (subcmd.startsWith("a")) {
+    auto value = subcmd.substring(1).toInt();
+  }
+  else {
+    auto value = subcmd.toInt();\
+    motorCmd.steps = value;
   }
 }
