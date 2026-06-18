@@ -85,7 +85,7 @@ impl ArmPositioner {
         self
     }
 
-    pub fn apply(&mut self) -> Result<()> {
+    pub fn apply_move(&mut self) -> Result<()> {
         let cmd_str = self.current_cmd.to_string();
         self.arduino_port.send_cmd(&cmd_str)?;
         self.current_cmd = MoveCmd::default();
@@ -95,6 +95,21 @@ impl ArmPositioner {
 
     pub fn get_motors_state(&self) -> MotorsState {
         self.motors_state.clone()
+    }
+
+    pub fn apply_lock(&mut self) -> Result<()> {
+        self.arduino_port.send_cmd("lock")?;
+        Ok(())
+    }
+
+    pub fn apply_unlock(&mut self) -> Result<()> {
+        self.arduino_port.send_cmd("unlock")?;
+        Ok(())
+    }
+
+    pub fn apply_turn_hand(&mut self, degree: i16) -> Result<()> {
+        self.arduino_port.send_cmd(&format!("turn {degree}"))?;
+        Ok(())
     }
 
     fn get_state(&self, motor: &Motor) -> &MotorState {

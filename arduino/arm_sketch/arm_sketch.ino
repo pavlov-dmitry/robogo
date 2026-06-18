@@ -1,4 +1,5 @@
 #include <AccelStepper.h>
+#include <Servo.h>
 #include <limits.h>
 
 // инкриментируется при изменении уже существующих комманд
@@ -11,6 +12,13 @@ const uint16_t ACCELERATION = 500;
 AccelStepper motor_x(AccelStepper::DRIVER, 2, 5);
 AccelStepper motor_y(AccelStepper::DRIVER, 3, 6);
 AccelStepper motor_z(AccelStepper::DRIVER, 4, 7);
+
+Servo lock_servo;
+Servo turn_servo;
+
+const int SERVO_TURN_PIN = 11; // Пин Z+ на шилде
+const int SERVO_LOCK_PIN = 12; // Пин SpnEn на шилде
+
 
 bool g_isMoveNow = false;
 
@@ -46,6 +54,9 @@ void applyCmdTo(AccelStepper &motor, const MotorCmd& cmd);
 void setup() {
   Serial.begin(9600);
 
+  turn_servo.attach(SERVO_TURN_PIN);
+  lock_servo.attach(SERVO_LOCK_PIN);
+
   pinMode(ENABLE_PIN, OUTPUT);
   digitalWrite(ENABLE_PIN, LOW);
 }
@@ -57,7 +68,7 @@ void loop() {
     anyRunning |= motor_y.run();
     anyRunning |= motor_z.run();
     if(!anyRunning) {
-      Serial.println("done");
+      doneCmd();
       g_isMoveNow = false;
     }
   }
@@ -65,6 +76,11 @@ void loop() {
     searchAndProcessCommands();
   }
 }
+
+void doneCmd()
+{
+  Serial.println("done");
+} 
 
 void searchAndProcessCommands() {
   if(Serial.available() > 0) {
@@ -79,9 +95,22 @@ void searchAndProcessCommands() {
 }
 
 void processCommand(String command) {
-  if(command == "hi") {
+  if (command == "hi") {
     processHi();
   }
+  else if (command == "lock") {
+    doLock();
+    doneCmd();
+  }
+  else if (command == "unlock") {
+    doUnlock();
+    doneCmd();
+  }
+  else if (command.startsWith("turn")) {
+    auto degree = parseTurnCmd(command);
+    turnHand(degree);
+    doneCmd();
+  } 
   else {
     auto cmd = parseMoveCmd(command);
     applyCmdTo(motor_x, cmd.x);
@@ -94,7 +123,7 @@ void processCommand(String command) {
 void processHi() {
     Serial.print("version: ");
     Serial.println(VERSION);
-    Serial.println("done");
+    doneCmd();
 }
 
 void applyCmdTo(AccelStepper &motor, const MotorCmd& cmd)
@@ -163,7 +192,46 @@ void parseMotorSubCmd(String subcmd, MotorCmd &motorCmd) {
     motorCmd.acceleration = value;
   }
   else {
-    auto value = subcmd.toInt();\
+    auto value = subcmd.toInt();
     motorCmd.steps = value;
   }
+}
+
+int parseTurnCmd(String cmd) {
+  return cmd.substring(4).toInt();
+}
+
+void turnHand(int degree) {
+  degree = min(degree, 45);
+  degree = max(degree, -45);
+  moveServo(turn_servo, 90 + degree, 1, 10);
+}
+
+void moveServo(Servo &servo, int degree, int step_degree, int step_delay_ms)
+{
+  int step = abs(step_degree);
+  int current_angle = servo.read();
+  if (degree < current_angle)
+  {
+    step *= -1;
+  } 
+  while (current_angle != degree) {
+    current_angle += step;
+    if (step < 0) {
+      current_angle = max(current_angle, degree);
+    }
+    else {
+      current_angle = min(current_angle, degree);
+    }
+    servo.write(current_angle);
+    delay(step_delay_ms);
+  }
+}
+
+void doLock() {
+  moveServo(lock_servo, 45, 5, 10);
+}
+
+void doUnlock() {
+  moveServo(lock_servo, 135, 5, 10);
 }

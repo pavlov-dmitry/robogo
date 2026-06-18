@@ -232,9 +232,16 @@ pub fn camera_mode() -> Result<()> {
     if !cam.is_opened()? {
         return Err(Error::CameraNotOpened);
     }
-    let width_success = cam.set(videoio::CAP_PROP_FRAME_WIDTH, 1920.0)?;
-    let height_success = cam.set(videoio::CAP_PROP_FRAME_HEIGHT, 1080.0)?;
-    if !width_success || !height_success {
+    //let width_success = cam.set(videoio::CAP_PROP_FRAME_WIDTH, 1920.0)?;
+    //let height_success = cam.set(videoio::CAP_PROP_FRAME_HEIGHT, 1080.0)?;
+    let mut params_setted = cam.set(videoio::CAP_PROP_FRAME_WIDTH, 3264.0)?;
+    params_setted &= cam.set(videoio::CAP_PROP_FRAME_HEIGHT, 2448.0)?;
+    params_setted &= cam.set(videoio::CAP_PROP_FPS, 15.0)?;
+    params_setted &= cam.set(
+        videoio::CAP_PROP_FOURCC,
+        videoio::VideoWriter::fourcc('M', 'J', 'P', 'G')? as f64,
+    )?;
+    if !params_setted {
         return Err(Error::CameraSetParamsError);
     }
 
@@ -249,7 +256,7 @@ pub fn camera_mode() -> Result<()> {
 
         highgui::imshow("Camera", &frame)?;
 
-        let key = highgui::wait_key(10)?;
+        let key = highgui::wait_key(1)?;
         match key {
             32 => {
                 // Пробел

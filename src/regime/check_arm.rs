@@ -112,6 +112,15 @@ enum CheckArmCommand {
     /// Пройтись по всем точкам n раз по кругу
     Loop { n: usize },
 
+    /// Закрыть клешню руки
+    Lock,
+
+    /// Открыть клешню руки
+    Unlock,
+
+    /// Подвернуть клешню руки от -45 до +45 градусов
+    Turn { degree: i16 },
+
     /// Выйти
     Quit,
 }
@@ -126,30 +135,36 @@ fn port_process(portname: String) -> Result {
     repl.repl(|cmd| {
         let answer = match cmd {
             // базовые команды мотора X
-            CheckArmCommand::X { steps } => arm.move_steps(&Motor::X, steps as i32).apply(),
-            CheckArmCommand::Xr { steps } => arm.move_steps(&Motor::X, steps as i32 * -1).apply(),
-            CheckArmCommand::Xss { speed } => arm.set_start_speed(&Motor::X, speed).apply(),
-            CheckArmCommand::Xms { speed } => arm.set_max_speed(&Motor::X, speed).apply(),
+            CheckArmCommand::X { steps } => arm.move_steps(&Motor::X, steps as i32).apply_move(),
+            CheckArmCommand::Xr { steps } => {
+                arm.move_steps(&Motor::X, steps as i32 * -1).apply_move()
+            }
+            CheckArmCommand::Xss { speed } => arm.set_start_speed(&Motor::X, speed).apply_move(),
+            CheckArmCommand::Xms { speed } => arm.set_max_speed(&Motor::X, speed).apply_move(),
             CheckArmCommand::Xa { acceleration } => {
-                arm.set_acceleration(&Motor::X, acceleration).apply()
+                arm.set_acceleration(&Motor::X, acceleration).apply_move()
             }
 
             // базовые команды мотора Y
-            CheckArmCommand::Y { steps } => arm.move_steps(&Motor::Y, steps as i32).apply(),
-            CheckArmCommand::Yr { steps } => arm.move_steps(&Motor::Y, steps as i32 * -1).apply(),
-            CheckArmCommand::Yss { speed } => arm.set_start_speed(&Motor::Y, speed).apply(),
-            CheckArmCommand::Yms { speed } => arm.set_max_speed(&Motor::Y, speed).apply(),
+            CheckArmCommand::Y { steps } => arm.move_steps(&Motor::Y, steps as i32).apply_move(),
+            CheckArmCommand::Yr { steps } => {
+                arm.move_steps(&Motor::Y, steps as i32 * -1).apply_move()
+            }
+            CheckArmCommand::Yss { speed } => arm.set_start_speed(&Motor::Y, speed).apply_move(),
+            CheckArmCommand::Yms { speed } => arm.set_max_speed(&Motor::Y, speed).apply_move(),
             CheckArmCommand::Ya { acceleration } => {
-                arm.set_acceleration(&Motor::Y, acceleration).apply()
+                arm.set_acceleration(&Motor::Y, acceleration).apply_move()
             }
 
             // базовые команды мотора Z
-            CheckArmCommand::Z { steps } => arm.move_steps(&Motor::Z, steps as i32).apply(),
-            CheckArmCommand::Zr { steps } => arm.move_steps(&Motor::Z, steps as i32 * -1).apply(),
-            CheckArmCommand::Zss { speed } => arm.set_start_speed(&Motor::Z, speed).apply(),
-            CheckArmCommand::Zms { speed } => arm.set_max_speed(&Motor::Z, speed).apply(),
+            CheckArmCommand::Z { steps } => arm.move_steps(&Motor::Z, steps as i32).apply_move(),
+            CheckArmCommand::Zr { steps } => {
+                arm.move_steps(&Motor::Z, steps as i32 * -1).apply_move()
+            }
+            CheckArmCommand::Zss { speed } => arm.set_start_speed(&Motor::Z, speed).apply_move(),
+            CheckArmCommand::Zms { speed } => arm.set_max_speed(&Motor::Z, speed).apply_move(),
             CheckArmCommand::Za { acceleration } => {
-                arm.set_acceleration(&Motor::Z, acceleration).apply()
+                arm.set_acceleration(&Motor::Z, acceleration).apply_move()
             }
 
             // команды работы со списком запомннных точек
@@ -190,7 +205,7 @@ fn port_process(portname: String) -> Result {
                         .move_to(&Motor::X, pnt.x.pos)
                         .move_to(&Motor::Y, pnt.y.pos)
                         .move_to(&Motor::Z, pnt.z.pos)
-                        .apply(),
+                        .apply_move(),
                     None => {
                         println!("Неверный индекс точки");
                         Ok(())
@@ -208,16 +223,22 @@ fn port_process(portname: String) -> Result {
                             .move_to(&Motor::X, pnt.x.pos)
                             .move_to(&Motor::Y, pnt.y.pos)
                             .move_to(&Motor::Z, pnt.z.pos)
-                            .apply();
+                            .apply_move();
                         if let Err(e) = answer {
                             result = Err(e);
                             break 'all;
                         }
                     }
                 }
-                println!("Клнец циклов");
+                println!("Конец циклов");
                 result
             }
+
+            CheckArmCommand::Lock => arm.apply_lock(),
+
+            CheckArmCommand::Unlock => arm.apply_unlock(),
+
+            CheckArmCommand::Turn { degree } => arm.apply_turn_hand(degree),
 
             CheckArmCommand::Quit => {
                 std::process::exit(0);
