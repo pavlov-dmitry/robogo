@@ -112,6 +112,14 @@ impl ArmPositioner {
         Ok(())
     }
 
+    pub fn apply_zero(&mut self) -> Result<()> {
+        self.arduino_port.send_cmd("zero")?;
+        self.motors_state.x.pos = 0;
+        self.motors_state.y.pos = 0;
+        self.motors_state.z.pos = 0;
+        Ok(())
+    }
+
     fn get_state(&self, motor: &Motor) -> &MotorState {
         match motor {
             Motor::X => &self.motors_state.x,

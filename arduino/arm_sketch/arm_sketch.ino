@@ -13,16 +13,29 @@ AccelStepper motor_x(AccelStepper::DRIVER, 2, 5);
 AccelStepper motor_y(AccelStepper::DRIVER, 3, 6);
 AccelStepper motor_z(AccelStepper::DRIVER, 4, 7);
 
+const int hallSensorPinX = 9;   // Пин X+ на шилде
+const int hallSensorPinY = 10;   // Пин Y+ на шилде
+const int hallSensorPinZ = 11;   // Пин Z+ на шилде
+
 Servo lock_servo;
 Servo turn_servo;
 
-const int SERVO_TURN_PIN = 11; // Пин Z+ на шилде
+const int SERVO_TURN_PIN = 13; // Пин SpnDr на шилде
 const int SERVO_LOCK_PIN = 12; // Пин SpnEn на шилде
 
-
-bool g_isMoveNow = false;
+const int ZERO_SPEED = 50;
+const int ZERO_ACCELERATE = 50;
 
 const auto INVALID_VALUE = INT_MAX;
+
+enum Mode
+{
+  Mode_Idle, // режим ожидания
+  Mode_Move, // режим передвижения
+  Mode_Zero // режим выхода в ноль
+};
+
+Mode g_currentMode = Mode_Idle;
 
 struct MotorCmd
 {
@@ -57,22 +70,81 @@ void setup() {
   turn_servo.attach(SERVO_TURN_PIN);
   lock_servo.attach(SERVO_LOCK_PIN);
 
+  // Включаем внутренний подтягивающий резистор.
+  pinMode(hallSensorPinX, INPUT_PULLUP);
+  pinMode(hallSensorPinY, INPUT_PULLUP);
+  pinMode(hallSensorPinZ, INPUT_PULLUP);
+
+
   pinMode(ENABLE_PIN, OUTPUT);
   digitalWrite(ENABLE_PIN, LOW);
 }
 
+void maybeOneStepBy(AccelStepper &motor, int step = 1)
+{
+  if (!motor.runSpeed()) {
+    motor.move(step);
+  }
+}
+
 void loop() {
-  if (g_isMoveNow) {
+  // режим перемещения в нужную точку
+  if (g_currentMode == Mode_Move) {
     bool anyRunning = false;
     anyRunning |= motor_x.run();
     anyRunning |= motor_y.run();
     anyRunning |= motor_z.run();
     if(!anyRunning) {
       doneCmd();
-      g_isMoveNow = false;
+      g_currentMode = Mode_Idle;
     }
   }
-  else {
+
+  // Режим выхода в 0
+  // Моторы в 0 выодят по очереди X, Y, Z
+  // когда крутим X надо подкручивать и Y чтобы из-за конструкции
+  // он не менял своего относительного положения
+  if (g_currentMode == Mode_Zero) {
+    int sensorStateX = digitalRead(hallSensorPinX);
+    int sensorStateY = digitalRead(hallSensorPinY);
+    if (sensorStateX != LOW) {
+      if (sensorStateY == LOW) {
+        motor_x.stop();
+        maybeOneStepBy(motor_y, 10000);
+      }
+
+      maybeOneStepBy(motor_x, 10000);
+    }
+    else
+    {
+      motor_y.stop();
+      motor_x.stop();
+      // магнитное поле обнаружено на оси Х
+      // мотор Х пришел в 0
+      int sensorStateY = digitalRead(hallSensorPinY);
+      if (sensorStateY != LOW) {
+        // подкручиваем следом мотор Y чтобы он не менял относительное положение
+        maybeOneStepBy(motor_y, -10000);
+      }
+      else {
+        // мотор Y пришел в 0
+        motor_y.stop();
+        int sensorStateZ = digitalRead(hallSensorPinZ);
+        if (sensorStateZ != LOW) {
+          maybeOneStepBy(motor_z, 10000);
+        }
+        else {
+          motor_z.stop();
+          // все моторы пришли в 0
+          doneCmd();
+          g_currentMode = Mode_Idle;
+        }
+      }
+    }
+  }
+
+  // режим ожидания комманд
+  if (g_currentMode == Mode_Idle) {
     searchAndProcessCommands();
   }
 }
@@ -110,13 +182,27 @@ void processCommand(String command) {
     auto degree = parseTurnCmd(command);
     turnHand(degree);
     doneCmd();
-  } 
+  }
+  else if (command.startsWith("zero")) {
+    g_currentMode = Mode_Zero;
+    motor_x.setSpeed(ZERO_SPEED);
+    motor_x.setMaxSpeed(ZERO_SPEED);
+    motor_x.setAcceleration(ZERO_SPEED);
+
+    motor_y.setSpeed(ZERO_SPEED);
+    motor_y.setMaxSpeed(ZERO_SPEED);
+    motor_y.setAcceleration(ZERO_SPEED);
+    
+    motor_z.setSpeed(ZERO_SPEED * 10);
+    motor_z.setMaxSpeed(ZERO_SPEED * 100);
+    motor_z.setAcceleration(ZERO_SPEED * 5);
+  }
   else {
     auto cmd = parseMoveCmd(command);
     applyCmdTo(motor_x, cmd.x);
     applyCmdTo(motor_y, cmd.y);
     applyCmdTo(motor_z, cmd.z);
-    g_isMoveNow = true;
+    g_currentMode = Mode_Move;;
   }
 }
 

@@ -121,6 +121,9 @@ enum CheckArmCommand {
     /// Подвернуть клешню руки от -45 до +45 градусов
     Turn { degree: i16 },
 
+    /// Позиционировать в 0
+    Zero,
+
     /// Выйти
     Quit,
 }
@@ -239,6 +242,8 @@ fn port_process(portname: String) -> Result {
             CheckArmCommand::Unlock => arm.apply_unlock(),
 
             CheckArmCommand::Turn { degree } => arm.apply_turn_hand(degree),
+
+            CheckArmCommand::Zero => arm.apply_zero(),
 
             CheckArmCommand::Quit => {
                 std::process::exit(0);
