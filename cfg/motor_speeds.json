@@ -1,0 +1,11 @@
+{
+  "x_speed": 1000,
+  "x_max_speed": 1500,
+  "x_acceleration": 1500,
+  "y_speed": 1000,
+  "y_max_speed": 1500,
+  "y_acceleration": 1500,
+  "z_speed": 10000,
+  "z_max_speed": 10000,
+  "z_acceleration": 10000
+}

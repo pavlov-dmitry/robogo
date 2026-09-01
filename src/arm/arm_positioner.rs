@@ -1,6 +1,23 @@
+use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
-use super::arduino_port::{ArduinoPort, Result};
+use super::arduino_port::{self, ArduinoPort};
+
+pub type Result<T> = arduino_port::Result<T>;
+#[derive(Default, Clone, Serialize, Deserialize)]
+pub struct SpeedSettings {
+    pub x_speed: u32,
+    pub x_max_speed: u32,
+    pub x_acceleration: u32,
+
+    pub y_speed: u32,
+    pub y_max_speed: u32,
+    pub y_acceleration: u32,
+
+    pub z_speed: u32,
+    pub z_max_speed: u32,
+    pub z_acceleration: u32,
+}
 
 #[derive(Default, Clone)]
 pub struct MotorState {
@@ -114,9 +131,8 @@ impl ArmPositioner {
 
     pub fn apply_zero(&mut self) -> Result<()> {
         self.arduino_port.send_cmd("zero")?;
-        self.motors_state.x.pos = 0;
-        self.motors_state.y.pos = 0;
-        self.motors_state.z.pos = 0;
+        self.motors_state = MotorsState::default();
+        self.next_motor_state = MotorsState::default();
         Ok(())
     }
 

@@ -16,7 +16,7 @@ use opencv::videoio::{self, VideoCapture};
 
 use proc::TimeMeasure;
 
-static DEFAULT_CAMERA_CALIBRATION_PATH: &str = "./etc/camera_calibration.json";
+static DEFAULT_CAMERA_CALIBRATION_PATH: &str = "./cfg/camera_calibration.json";
 
 #[derive(Clone)]
 pub struct Settings {

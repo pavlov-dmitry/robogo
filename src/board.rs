@@ -34,8 +34,8 @@ impl From<Color> for Cell {
 
 #[derive(Clone, Copy, PartialEq)]
 pub struct Pos {
-    x: usize,
-    y: usize,
+    pub x: usize,
+    pub y: usize,
 }
 
 impl Pos {
@@ -60,7 +60,7 @@ impl FromStr for Pos {
     type Err = ParsePositionError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.len() > 1 {
+        if s.len() == 2 || s.len() == 3 {
             let char = s.chars().nth(0).expect("WTF: len() > 1");
             let found = Y_LETTERS.chars().enumerate().find(|(_, c)| *c == char);
             if let Some((pos, _)) = found {

@@ -1,0 +1,63 @@
+{
+  "bottom_left": {
+    "x": -3917,
+    "y": -2640
+  },
+  "top_left": {
+    "x": -3790,
+    "y": 90
+  },
+  "top_right": {
+    "x": -2272,
+    "y": 836
+  },
+  "bottom_right": {
+    "x": -115,
+    "y": 429
+  },
+  "stone": {
+    "top_left": 0,
+    "top": 0,
+    "top_right": 0,
+    "left": 0,
+    "center": 0,
+    "right": 0,
+    "bottom_left": 0,
+    "bottom": 0,
+    "bottom_right": 0
+  },
+  "move_z": -6100,
+  "park": {
+    "x": -1000,
+    "y": 900
+  },
+  "ai_new_stones": {
+    "x": 0,
+    "y": 0
+  },
+  "human_new_stones": {
+    "x": 0,
+    "y": 0
+  },
+  "ai_prisoners": {
+    "x": 0,
+    "y": 0
+  },
+  "human_prisoners": {
+    "x": 0,
+    "y": 0
+  },
+  "ai_bowl": {
+    "x": 0,
+    "y": 0
+  },
+  "human_bowl": {
+    "x": 0,
+    "y": 0
+  },
+  "bowl_z": 0,
+  "turn": {
+    "x": -2277,
+    "y": -1009
+  }
+}

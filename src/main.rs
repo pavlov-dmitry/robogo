@@ -1,5 +1,6 @@
 mod arm;
 mod board;
+mod config;
 mod human_vs_ai_game_control;
 mod katago;
 mod listen;

@@ -3,7 +3,7 @@
 #include <limits.h>
 
 // инкриментируется при изменении уже существующих комманд
-const uint16_t VERSION = 1;
+const uint16_t VERSION = 2;
 
 const uint16_t MAX_SPEED_INTERVAL = 20000;
 const uint16_t MIN_SPEED_INTERVAL = 1000;
@@ -23,8 +23,7 @@ Servo turn_servo;
 const int SERVO_TURN_PIN = 13; // Пин SpnDr на шилде
 const int SERVO_LOCK_PIN = 12; // Пин SpnEn на шилде
 
-const int ZERO_SPEED = 50;
-const int ZERO_ACCELERATE = 50;
+const int ZERO_SPEED = 200;
 
 const auto INVALID_VALUE = INT_MAX;
 
@@ -65,7 +64,7 @@ void parseMotorSubCmd(String subcmd, MotorCmd &motorCmd);
 void applyCmdTo(AccelStepper &motor, const MotorCmd& cmd);
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
 
   turn_servo.attach(SERVO_TURN_PIN);
   lock_servo.attach(SERVO_LOCK_PIN);
@@ -80,17 +79,11 @@ void setup() {
   digitalWrite(ENABLE_PIN, LOW);
 }
 
-void maybeOneStepBy(AccelStepper &motor, int step = 1)
-{
-  if (!motor.runSpeed()) {
-    motor.move(step);
-  }
-}
-
 void loop() {
   // режим перемещения в нужную точку
   if (g_currentMode == Mode_Move) {
     bool anyRunning = false;
+
     anyRunning |= motor_x.run();
     anyRunning |= motor_y.run();
     anyRunning |= motor_z.run();
@@ -109,33 +102,38 @@ void loop() {
     int sensorStateY = digitalRead(hallSensorPinY);
     if (sensorStateX != LOW) {
       if (sensorStateY == LOW) {
-        motor_x.stop();
-        maybeOneStepBy(motor_y, 10000);
+        // подкручиваем следом мотор Y чтобы он не менял относительное положение
+        motor_y.setSpeed(ZERO_SPEED);
+        motor_y.runSpeed();
       }
 
-      maybeOneStepBy(motor_x, 10000);
+      motor_x.setSpeed(ZERO_SPEED);
+      motor_x.runSpeed();
     }
     else
     {
-      motor_y.stop();
-      motor_x.stop();
       // магнитное поле обнаружено на оси Х
       // мотор Х пришел в 0
       int sensorStateY = digitalRead(hallSensorPinY);
       if (sensorStateY != LOW) {
-        // подкручиваем следом мотор Y чтобы он не менял относительное положение
-        maybeOneStepBy(motor_y, -10000);
+        motor_y.setSpeed(-ZERO_SPEED);
+        motor_y.runSpeed();
       }
       else {
         // мотор Y пришел в 0
-        motor_y.stop();
         int sensorStateZ = digitalRead(hallSensorPinZ);
         if (sensorStateZ != LOW) {
-          maybeOneStepBy(motor_z, 10000);
+          motor_z.setSpeed(ZERO_SPEED * 10);
+          motor_z.runSpeed();
         }
         else {
-          motor_z.stop();
           // все моторы пришли в 0
+          motor_x.setSpeed(0);
+          motor_y.setSpeed(0);
+          motor_z.setSpeed(0);
+          motor_x.move(0);
+          motor_y.move(0);
+          motor_z.move(0);
           doneCmd();
           g_currentMode = Mode_Idle;
         }
@@ -185,17 +183,9 @@ void processCommand(String command) {
   }
   else if (command.startsWith("zero")) {
     g_currentMode = Mode_Zero;
-    motor_x.setSpeed(ZERO_SPEED);
-    motor_x.setMaxSpeed(ZERO_SPEED);
-    motor_x.setAcceleration(ZERO_SPEED);
-
-    motor_y.setSpeed(ZERO_SPEED);
-    motor_y.setMaxSpeed(ZERO_SPEED);
-    motor_y.setAcceleration(ZERO_SPEED);
-    
-    motor_z.setSpeed(ZERO_SPEED * 10);
-    motor_z.setMaxSpeed(ZERO_SPEED * 100);
-    motor_z.setAcceleration(ZERO_SPEED * 5);
+    motor_z.setMaxSpeed(ZERO_SPEED * 10);
+    motor_x.setMaxSpeed(ZERO_SPEED * 10);
+    motor_y.setMaxSpeed(ZERO_SPEED * 10);
   }
   else {
     auto cmd = parseMoveCmd(command);
@@ -290,6 +280,9 @@ int parseTurnCmd(String cmd) {
 void turnHand(int degree) {
   degree = min(degree, 45);
   degree = max(degree, -45);
+  if (degree > 0) {
+    degree = degree * 1.15;
+  }
   moveServo(turn_servo, 90 + degree, 1, 10);
 }
 

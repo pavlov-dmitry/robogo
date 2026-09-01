@@ -1114,6 +1114,8 @@ dependencies = [
  "clap-repl",
  "cpal",
  "opencv",
+ "serde",
+ "serde_json",
  "serialport",
  "thiserror 2.0.18",
  "vosk",
